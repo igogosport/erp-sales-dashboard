@@ -278,6 +278,22 @@ async function loadAll(){
 const BRAND_NORMALIZE={'Scosche':'SCOSCHE','MARLEY_OLD':'MARLEY','PHILIPS':'Philips'};
 function normBrand(b){return BRAND_NORMALIZE[b]||b;}
 
+const CODE_BRAND_OVERRIDES={'G00004555':'JLab','G00004564':'JLab','G00005375':'JLab','G00009160':'JBL'};
+const NAME_BRAND_PREFIXES=[
+  ['myFirst','myFirst'],['Marshall','Marshall'],['JBL','JBL'],['JLab','JLab'],
+  ['GO Air','JLab'],['WONDERBOOM','UE'],['Marley','MARLEY'],
+  ['鐵三角','鐵三角'],['DOSHISHA','DOSHISHA'],['Harman','Harman Kardon'],
+  ['EarFun','EarFun'],['Cardo','Cardo'],['Cricut','Cricut'],
+  ['UE ','UE'],['Enacfire','Enacfire'],['Blue ','Blue Microphones'],
+];
+function detectBrand(code,name){
+  if(masterBrand[code])return masterBrand[code];
+  if(CODE_BRAND_OVERRIDES[code])return CODE_BRAND_OVERRIDES[code];
+  const m=name.match(/【(.+?)】/);if(m)return m[1];
+  for(const[prefix,brand]of NAME_BRAND_PREFIXES){if(name.startsWith(prefix))return brand;}
+  return '其他';
+}
+
 function parseMaster(rows){
   masterBrand={};masterName={};masterCategory={};
   rows.slice(1).forEach(r=>{
@@ -308,7 +324,7 @@ function parseSales(rows){
     const name=String(r[nameIdx]||'').trim();
     const qty=parseFloat(String(r[qtyIdx]||'0').replace(/,/g,''))||0;
     const rev=revIdx>=0?parseFloat(String(r[revIdx]||'0').replace(/,/g,''))||0:0;
-    const brand=masterBrand[code]||(name.match(/【(.+?)】/)||[])[1]||'其他';
+    const brand=detectBrand(code,name);
     const[y,mo]=date.split('/');const key=y+mo.padStart(2,'0');
     mSet.add(key);
     if(!monthSales[key])monthSales[key]={brands:{},codes:{},brandRev:{},codeRev:{}};
@@ -333,7 +349,7 @@ function parseInv(rows){
     if(!/^[A-Z]\d{5,}$/.test(code)||!name||isNaN(qty))return;
     if(seen.has(code))return;
     seen.add(code);
-    const brand=masterBrand[code]||(name.match(/【(.+?)】/)||[])[1]||'其他';
+    const brand=detectBrand(code,name);
     invItems.push({code,name,qty,brand});
   });
 }
