@@ -165,6 +165,11 @@ tbody tr:hover td{background:var(--surface2)}
     </div>
   </div>
 
+  <div class="card" id="rev-chart-card" style="display:none">
+    <div class="card-title" id="rev-title">每月銷售金額</div>
+    <div class="chart-wrap"><canvas id="revChart"></canvas></div>
+  </div>
+
   <div id="brand-rank-section" style="display:none">
     <div class="grid-2">
       <div class="card">
@@ -511,9 +516,11 @@ function renderAll(){
   document.getElementById('metrics').style.display='grid';
   document.getElementById('charts-row').style.display='grid';
   const showBrandRank=selectedBrands.size===0;
+  document.getElementById('rev-chart-card').style.display='block';
   document.getElementById('brand-rank-section').style.display=showBrandRank?'block':'none';
   renderSales();
   renderRanking();
+  renderRevChart();
   renderInventoryMetrics();
   if(showBrandRank)renderBrandRanking();
 }
@@ -548,6 +555,35 @@ function renderSales(){
     options:{responsive:true,maintainAspectRatio:false,
       plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>` ${ctx.parsed.y.toLocaleString()} 件`}}},
       scales:{x:{ticks:{font:{size:10},maxRotation:45,maxTicksLimit:18}},y:{beginAtZero:true,ticks:{font:{size:10}}}}}
+  });
+}
+
+let revChart=null;
+function renderRevChart(){
+  const brands=getActiveBrands();
+  const prods=getActiveProducts();
+  const cats=getActiveCats();
+  const activeMo=getActiveMonths();
+  const months=activeMo||allMonths.slice().sort();
+  const data=months.map(m=>{
+    const s=monthSales[m]||{};
+    if(prods)return prods.reduce((sum,id)=>sum+(s.codeRev&&s.codeRev[id]||0),0);
+    if(cats){
+      const catCodes=Object.keys(masterCategory).filter(id=>cats.includes(masterCategory[id])&&(!brands||brands.includes(masterBrand[id])));
+      return catCodes.reduce((sum,id)=>sum+(s.codeRev&&s.codeRev[id]||0),0);
+    }
+    if(brands)return brands.reduce((sum,b)=>sum+(s.brandRev&&s.brandRev[b]||0),0);
+    return Object.values(s.brandRev||{}).reduce((a,b)=>a+b,0);
+  });
+  const brandLabel=brands?brands.join('、'):'全品牌';
+  document.getElementById('rev-title').textContent=brandLabel+' 每月銷售金額';
+  if(revChart)revChart.destroy();
+  revChart=new Chart(document.getElementById('revChart'),{
+    type:'line',
+    data:{labels:months,datasets:[{data:data.map(v=>Math.round(v/10000)),borderColor:'#1D9E75',backgroundColor:'#1D9E7522',borderWidth:2,pointRadius:3,pointBackgroundColor:'#1D9E75',fill:true,tension:0.3}]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>` ${ctx.parsed.y.toLocaleString()} 萬`}}},
+      scales:{x:{ticks:{font:{size:10},maxRotation:45,maxTicksLimit:18}},y:{beginAtZero:true,ticks:{font:{size:10},callback:v=>v+'萬'}}}}
   });
 }
 
