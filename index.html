@@ -282,8 +282,7 @@ function parseSales(rows){
     if(!monthSales[key])monthSales[key]={};
     monthSales[key][brand]=(monthSales[key][brand]||0)+qty;
   });
-  // store as YYYYMM e.g. 202501
-  allMonths=[...mSet].sort().map(m=>{const[y,mo]=m.split('/');return y+mo.padStart(2,'0');});
+  allMonths=[...mSet].sort();
 }
 
 /* parse inventory */
