@@ -114,11 +114,11 @@ tbody tr:hover td{background:var(--surface2)}
 <div class="page">
 
   <div class="auth-card" id="auth-card">
-    <h3>請輸入 Service Account 金鑰</h3>
-    <p>貼上 Google Service Account 的 JSON 金鑰，之後每次開啟會自動連線。</p>
+    <h3>設定 Apps Script 代理網址</h3>
+    <p>請在 Google 試算表的 <b>擴充功能 → Apps Script</b> 部署 Web App，將網址貼入下方。<br>之後每次開啟會自動連線，金鑰不會傳至前端。</p>
     <div class="key-box">
-      <textarea id="key-input" placeholder='{ "type": "service_account", ... }'></textarea>
-      <button class="btn btn-primary" style="width:100%" onclick="saveKey()">連線</button>
+      <textarea id="proxy-input" rows="2" placeholder="https://script.google.com/macros/s/…/exec" style="height:52px"></textarea>
+      <button class="btn btn-primary" style="width:100%" onclick="saveProxy()">連線</button>
     </div>
   </div>
 
@@ -177,21 +177,18 @@ tbody tr:hover td{background:var(--surface2)}
 </div>
 
 <script>
-const SPREADSHEET_ID='1N87NXPJuRNXyuONZOJyIN5iyMdpgmykx_iTGWAZSgW0';
 const SALES_SHEET='ERP銷售資料';
 const INV_SHEET='ERP庫存';
 const MASTER_SHEET='✨「計算表」季節性加權';
-const SCOPE='https://www.googleapis.com/auth/spreadsheets.readonly';
-const TOKEN_URL='https://oauth2.googleapis.com/token';
 
-let saKey=null,accessToken=null,tokenExpiry=0;
+let proxyUrl='';
 let monthSales={},allMonths=[],masterBrand={},masterName={},masterCategory={},invItems=[];
 
 // selected filters: empty Set = all selected
 let selectedBrands=new Set();
 let selectedMonths=new Set();
 let selectedCategories=new Set();
-let selectedProducts=new Set(); // stores product codes
+let selectedProducts=new Set();
 
 /* status */
 function setDot(s,t){document.getElementById('dot').className='dot '+s;document.getElementById('hdr-text').textContent=t}
@@ -202,38 +199,23 @@ function showBanner(type,msg){
   if(type==='ok')setTimeout(()=>el.innerHTML='',3000);
 }
 
-/* jwt */
-function b64url(d){const b=typeof d==='string'?btoa(unescape(encodeURIComponent(d))):btoa(String.fromCharCode(...new Uint8Array(d)));return b.replace(/=/g,'').replace(/\+/g,'-').replace(/\//g,'_')}
-async function getToken(){
-  if(accessToken&&Date.now()<tokenExpiry-30000)return accessToken;
-  const now=Math.floor(Date.now()/1000);
-  const h=b64url(JSON.stringify({alg:'RS256',typ:'JWT'}));
-  const p=b64url(JSON.stringify({iss:saKey.client_email,scope:SCOPE,aud:TOKEN_URL,iat:now,exp:now+3600}));
-  const si=`${h}.${p}`;
-  const pem=saKey.private_key.replace(/-----BEGIN PRIVATE KEY-----/,'').replace(/-----END PRIVATE KEY-----/,'').replace(/\n/g,'');
-  const kb=Uint8Array.from(atob(pem),c=>c.charCodeAt(0));
-  const ck=await crypto.subtle.importKey('pkcs8',kb,{name:'RSASSA-PKCS1-v1_5',hash:'SHA-256'},false,['sign']);
-  const sig=await crypto.subtle.sign('RSASSA-PKCS1-v1_5',ck,new TextEncoder().encode(si));
-  const jwt=`${si}.${b64url(sig)}`;
-  const res=await fetch(TOKEN_URL,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:`grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=${jwt}`});
+/* proxy fetch — calls Apps Script Web App */
+async function sheetGet(sheet, range){
+  let url=proxyUrl+'?sheet='+encodeURIComponent(sheet);
+  if(range)url+='&range='+encodeURIComponent(range);
+  const res=await fetch(url);
+  if(!res.ok)throw new Error('HTTP '+res.status);
   const d=await res.json();
-  if(!d.access_token)throw new Error(d.error_description||'Token失敗');
-  accessToken=d.access_token;tokenExpiry=Date.now()+(d.expires_in||3600)*1000;
-  return accessToken;
-}
-async function apiGet(url){
-  const tok=await getToken();
-  const res=await fetch(url,{headers:{Authorization:`Bearer ${tok}`}});
-  if(!res.ok){const e=await res.json().catch(()=>({}));throw new Error(e.error?.message||`HTTP ${res.status}`)}
-  return res.json();
+  if(d.error)throw new Error(d.error);
+  return d;
 }
 
-/* auth */
-function saveKey(){
-  const raw=document.getElementById('key-input').value.trim();
-  try{JSON.parse(raw);}catch{showBanner('err','JSON 格式錯誤');return;}
-  localStorage.setItem('sa_key',raw);
-  saKey=JSON.parse(raw);
+/* save proxy URL */
+function saveProxy(){
+  const url=document.getElementById('proxy-input').value.trim();
+  if(!url.startsWith('https://script.google.com')){showBanner('err','網址格式不正確');return;}
+  localStorage.setItem('proxy_url',url);
+  proxyUrl=url;
   document.getElementById('auth-card').style.display='none';
   loadAll();
 }
@@ -243,9 +225,9 @@ async function loadAll(){
   setDot('spin','讀取中…');
   try{
     const [sRes,iRes,mRes]=await Promise.all([
-      apiGet(`https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent(SALES_SHEET)}`),
-      apiGet(`https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent(INV_SHEET)}`),
-      apiGet(`https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent(MASTER_SHEET+'!B:E')}`)
+      sheetGet(SALES_SHEET),
+      sheetGet(INV_SHEET),
+      sheetGet(MASTER_SHEET,'B:E')
     ]);
     parseMaster(mRes.values||[]);
     parseSales(sRes.values||[]);
@@ -637,9 +619,10 @@ function toggleCollapse(wrapId){
 
 /* init */
 window.addEventListener('load',async()=>{
-  const raw=localStorage.getItem('sa_key');
-  if(!raw){document.getElementById('auth-card').style.display='block';setDot('err','未連線');return;}
-  try{saKey=JSON.parse(raw);await loadAll();}
+  const url=localStorage.getItem('proxy_url');
+  if(!url){document.getElementById('auth-card').style.display='block';setDot('err','未設定代理網址');return;}
+  proxyUrl=url;
+  try{await loadAll();}
   catch(e){setDot('err','連線失敗');showBanner('err',e.message);document.getElementById('auth-card').style.display='block';}
 });
 </script>
