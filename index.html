@@ -592,7 +592,7 @@ function renderRanking(){
         title:ctx=>masterName[show[ctx[0].dataIndex][0]]||show[ctx[0].dataIndex][0],
         label:ctx=>` 銷量：${ctx.parsed.x.toLocaleString()} 件`
       }}},
-      scales:{x:{beginAtZero:true,ticks:{font:{size:9}}},y:{ticks:{font:{size:9}}}}}
+      scales:{x:{position:'top',beginAtZero:true,ticks:{font:{size:9}}},y:{ticks:{font:{size:9}}}}}
   });
 
   const brandLabel=brands?brands.join('、'):'全品牌';
