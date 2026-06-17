@@ -104,7 +104,6 @@ select:focus{outline:none;border-color:var(--accent)}
   <div class="hdr">
     <div class="logo"><i class="ti ti-snowflake" aria-hidden="true"></i> 季節性加權分析</div>
     <nav>
-      <a class="nav-btn" href="index.html"><i class="ti ti-trending-up" aria-hidden="true"></i> 銷售趨勢</a>
       <a class="nav-btn active" href="seasonal.html"><i class="ti ti-snowflake" aria-hidden="true"></i> 季節性加權</a>
     </nav>
     <span class="dot" id="dot"></span>
@@ -441,7 +440,7 @@ async function loadSheets(){
   const sel=document.getElementById('sheet-select');
   sel.innerHTML='';
   titles.forEach(t=>{const o=document.createElement('option');o.value=t;o.textContent=t;sel.appendChild(o);});
-  const best=titles.find(t=>t.includes('計算')||t.includes('季節'))||titles[0]||'';
+  const best=titles.find(t=>t.includes('計算表'))||titles.find(t=>t.includes('計算')||t.includes('季節'))||titles[0]||'';
   sel.value=best;
   SHEET_NAME=best;
   document.getElementById('sheet-label').textContent=best;
