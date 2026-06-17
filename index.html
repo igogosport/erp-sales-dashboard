@@ -103,10 +103,7 @@ tbody tr:hover td{background:var(--surface2)}
       <div class="tags" id="brand-tags"></div>
     </div>
     <div class="filter-divider"></div>
-    <div class="filter-row">
-      <span class="filter-label">月份</span>
-      <div class="tags" id="month-tags"></div>
-    </div>
+    <div id="month-rows"></div>
   </div>
 </div>
 
@@ -301,42 +298,95 @@ function parseInv(rows){
   });
 }
 
-/* TAG helpers */
-function renderTagGroup(containerId, items, selectedSet, onToggle){
-  const el=document.getElementById(containerId);
+/* brand tags: single-select, Ctrl+click for multi-select */
+function renderBrandTags(brands){
+  const el=document.getElementById('brand-tags');
   el.innerHTML='';
-  // "全部" tag
   const allTag=document.createElement('span');
-  allTag.className='tag all-tag'+(selectedSet.size===0?' active':'');
+  allTag.className='tag all-tag'+(selectedBrands.size===0?' active':'');
   allTag.textContent='全部';
-  allTag.onclick=()=>{selectedSet.clear();renderTagGroup(containerId,items,selectedSet,onToggle);onToggle();};
+  allTag.onclick=()=>{selectedBrands.clear();renderBrandTags(brands);renderAll();};
   el.appendChild(allTag);
-  items.forEach(item=>{
+  brands.forEach(b=>{
     const t=document.createElement('span');
-    t.className='tag'+(selectedSet.has(item)?' active':'');
-    t.textContent=item;
-    t.onclick=()=>{
-      if(selectedSet.has(item))selectedSet.delete(item);
-      else selectedSet.add(item);
-      renderTagGroup(containerId,items,selectedSet,onToggle);
-      onToggle();
+    t.className='tag'+(selectedBrands.has(b)?' active':'');
+    t.textContent=b;
+    t.onclick=(e)=>{
+      if(e.ctrlKey||e.metaKey){
+        // Ctrl: toggle multi-select
+        if(selectedBrands.has(b))selectedBrands.delete(b);
+        else selectedBrands.add(b);
+      } else {
+        // normal click: single-select (or clear if already sole selection)
+        if(selectedBrands.size===1&&selectedBrands.has(b))selectedBrands.clear();
+        else{selectedBrands.clear();selectedBrands.add(b);}
+      }
+      renderBrandTags(brands);renderAll();
     };
     el.appendChild(t);
   });
 }
 
+/* month tags: one row per year */
+function renderMonthTags(){
+  const container=document.getElementById('month-rows');
+  container.innerHTML='';
+  // group months by year
+  const byYear={};
+  allMonths.forEach(m=>{const y=m.slice(0,4);if(!byYear[y])byYear[y]=[];byYear[y].push(m);});
+  const years=Object.keys(byYear).sort().reverse();
+  years.forEach(y=>{
+    const row=document.createElement('div');
+    row.className='filter-row';
+    const lbl=document.createElement('span');
+    lbl.className='filter-label';lbl.textContent=y;
+    row.appendChild(lbl);
+    const tags=document.createElement('div');
+    tags.className='tags';
+    // "全年" tag
+    const allYrTag=document.createElement('span');
+    const yearMonths=byYear[y];
+    const allYrActive=yearMonths.every(m=>selectedMonths.has(m));
+    allYrTag.className='tag all-tag'+(allYrActive?' active':'');
+    allYrTag.textContent='全年';
+    allYrTag.onclick=()=>{
+      if(allYrActive)yearMonths.forEach(m=>selectedMonths.delete(m));
+      else yearMonths.forEach(m=>selectedMonths.add(m));
+      renderMonthTags();renderSales();
+    };
+    tags.appendChild(allYrTag);
+    // individual months (newest first within year)
+    [...yearMonths].reverse().forEach(m=>{
+      const t=document.createElement('span');
+      t.className='tag'+(selectedMonths.has(m)?' active':'');
+      t.textContent=m;
+      t.onclick=()=>{
+        if(selectedMonths.has(m))selectedMonths.delete(m);
+        else selectedMonths.add(m);
+        renderMonthTags();renderSales();
+      };
+      tags.appendChild(t);
+    });
+    row.appendChild(tags);
+    container.appendChild(row);
+    // divider between years (except last)
+    if(y!==years[years.length-1]){
+      const div=document.createElement('div');
+      div.className='filter-divider';
+      container.appendChild(div);
+    }
+  });
+}
+
 /* build filters */
 function buildFilters(){
-  const months=[...allMonths].reverse(); // newest first
   const brands=[...new Set(Object.values(masterBrand))].filter(Boolean).sort();
-
   selectedBrands=new Set();
   selectedMonths=new Set();
   // default: latest 12 months
-  months.slice(0,12).forEach(m=>selectedMonths.add(m));
-
-  renderTagGroup('brand-tags',brands,selectedBrands,renderAll);
-  renderTagGroup('month-tags',months,selectedMonths,renderSales);
+  [...allMonths].reverse().slice(0,12).forEach(m=>selectedMonths.add(m));
+  renderBrandTags(brands);
+  renderMonthTags();
 }
 
 /* get active filters */
