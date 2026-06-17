@@ -116,9 +116,9 @@ select:focus{outline:none;border-color:var(--accent)}
 
   <!-- Controls -->
   <div class="controls" id="controls" style="display:none">
-    <label>工作表</label>
-    <select id="sheet-select" onchange="onSheetChange()"></select>
-    <label>群組</label>
+    <span id="sheet-label" style="font-size:12px;color:var(--text2)"></span>
+    <select id="sheet-select" onchange="onSheetChange()" style="display:none"></select>
+    <label>品牌</label>
     <select id="group-select" onchange="onGroupChange()">
       <option value="">全部</option>
     </select>
@@ -269,11 +269,11 @@ function parseSheet(rows){
     else{ monthCols.forEach(m=>{ dataMatrix[key].vals[m.h]=(dataMatrix[key].vals[m.h]||0)+(vals[m.h]||0); }); }
   });
 
-  // Group select
-  const groups=[...new Set(rows.slice(1).map(r=>String(r[0]||'').trim()).filter(Boolean))];
+  // Brand select from first column
+  const brands=[...new Set(rows.slice(1).map(r=>String(r[0]||'').trim()).filter(Boolean))].sort();
   const gs=document.getElementById('group-select');
   gs.innerHTML='<option value="">全部</option>';
-  groups.forEach(g=>{const o=document.createElement('option');o.value=g;o.textContent=g;gs.appendChild(o);});
+  brands.forEach(g=>{const o=document.createElement('option');o.value=g;o.textContent=g;gs.appendChild(o);});
 
   // Compare select
   const cs=document.getElementById('compare-select');
@@ -441,10 +441,10 @@ async function loadSheets(){
   const sel=document.getElementById('sheet-select');
   sel.innerHTML='';
   titles.forEach(t=>{const o=document.createElement('option');o.value=t;o.textContent=t;sel.appendChild(o);});
-  // Pick 計算表 if exists, else first
   const best=titles.find(t=>t.includes('計算')||t.includes('季節'))||titles[0]||'';
   sel.value=best;
   SHEET_NAME=best;
+  document.getElementById('sheet-label').textContent=best;
   document.getElementById('controls').style.display='flex';
 }
 
