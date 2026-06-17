@@ -321,10 +321,10 @@ async function apiGet(url){
 const BRAND_NORMALIZE={'Scosche':'SCOSCHE','MARLEY_OLD':'MARLEY','PHILIPS':'Philips'};
 function normBrand(b){return BRAND_NORMALIZE[b]||b;}
 
-/* Status classification */
-function classifyStatus(qty,avg3,months,reorder){
+/* Status classification — EOL determined by 計算表 A欄, not avg3 */
+function classifyStatus(qty,avg3,months,reorder,isEOL){
   if(qty<=0)return '零庫存';
-  if(avg3<=0)return 'EOL待清';
+  if(isEOL)return 'EOL待清';
   if(months<1.5)return '缺貨風險';
   if(months>6)return '庫存偏高';
   return '正常';
@@ -369,14 +369,15 @@ function parseMaster(rows){
     const brand=normBrand(String(r[2]||'').trim())||'其他';
     const name=String(r[3]||'').trim();
     const cat=String(r[4]||'').trim();
+    const isEOL=String(r[0]||'').trim()==='EOL';
     const qty=parseNum(r[17]);
     const avg3=parseNum(r[18]);
     const months=avg3>0?parseFloat((qty/avg3).toFixed(1)):qty>0?999:0;
     const reorder=parseNum(r[12]);
     const cost=ecountCosts[code]||0;
     const invValue=cost>0?Math.round(qty*cost):0;
-    const status=classifyStatus(qty,avg3,months,reorder);
-    allItems.push({code,brand,name,cat,qty,avg3,months,reorder,cost,invValue,status});
+    const status=classifyStatus(qty,avg3,months,reorder,isEOL);
+    allItems.push({code,brand,name,cat,qty,avg3,months,reorder,cost,invValue,status,isEOL});
   });
 }
 
