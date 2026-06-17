@@ -251,7 +251,7 @@ function parseSales(rows){
     const qty=parseFloat(String(r[qtyIdx]||'0').replace(/,/g,''))||0;
     let brand='';
     if(brandIdx>=0)brand=String(r[brandIdx]||'').trim();
-    if(!brand)brand=(name.match(/[【\[](.+?)[】\]]/)||[])[1]||'其他';
+    if(!brand)brand=(name.match(/【(.+?)】/)||[])[1]||'其他';
     if(code&&brand)codeToBrand[code]=brand;
     mSet.add(date);
     if(!monthSales[date])monthSales[date]={};
