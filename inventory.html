@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>庫存健康度</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#f5f5f3;--surface:#fff;--surface2:#f1efe8;--surface3:#e8e6df;
+  --border:rgba(0,0,0,.1);--border2:rgba(0,0,0,.18);
+  --text:#1a1a18;--text2:#5f5e5a;--text3:#88877f;
+  --accent:#378ADD;--green:#1d9e75;--red:#d85a30;--amber:#ba7517;
+  --r-md:8px;--r-lg:12px;
+}
+@media(prefers-color-scheme:dark){
+  :root{
+    --bg:#1a1a18;--surface:#242422;--surface2:#2c2c2a;--surface3:#363634;
+    --border:rgba(255,255,255,.09);--border2:rgba(255,255,255,.18);
+    --text:#f0ede8;--text2:#b4b2a9;--text3:#888780;
+  }
+}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;font-size:14px}
+
+header{background:var(--surface);border-bottom:.5px solid var(--border);padding:0 24px;position:sticky;top:0;z-index:100}
+.hdr{max-width:1400px;margin:0 auto;display:flex;align-items:center;gap:16px;height:52px}
+.logo{font-size:15px;font-weight:600}
+.nav-links{display:flex;gap:4px;margin-left:8px}
+.nav-link{font-size:12px;padding:4px 10px;border-radius:var(--r-md);color:var(--text2);text-decoration:none;transition:all .15s}
+.nav-link:hover{background:var(--surface2);color:var(--text)}
+.nav-link.active{background:var(--surface2);color:var(--text);font-weight:500}
+.spacer{flex:1}
+.dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;background:#ccc;transition:background .3s}
+.dot.ok{background:var(--green)}.dot.err{background:var(--red)}.dot.spin{background:var(--amber);animation:pulse 1s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+#hdr-text{font-size:11px;color:var(--text3)}
+.btn{padding:5px 12px;font-size:12px;border:.5px solid var(--border2);border-radius:var(--r-md);background:var(--surface);color:var(--text);cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:5px;transition:all .1s}
+.btn:hover{background:var(--surface2)}
+
+/* filter */
+.filter-area{background:var(--surface);border-bottom:.5px solid var(--border);padding:12px 24px;display:none}
+.filter-inner{max-width:1400px;margin:0 auto;display:flex;flex-direction:column;gap:10px}
+.filter-row{display:flex;align-items:flex-start;gap:10px;flex-wrap:wrap}
+.filter-label{font-size:11px;color:var(--text3);white-space:nowrap;padding-top:5px;min-width:42px}
+.tags{display:flex;flex-wrap:wrap;gap:5px;flex:1}
+.tag{padding:4px 11px;font-size:12px;font-family:inherit;border:.5px solid var(--border2);border-radius:20px;cursor:pointer;background:var(--surface2);color:var(--text2);transition:all .15s;user-select:none;white-space:nowrap}
+.tag:hover{border-color:var(--accent);color:var(--accent)}
+.tag.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+.filter-divider{height:.5px;background:var(--border)}
+
+/* page */
+.page{max-width:1400px;margin:0 auto;padding:20px 24px;display:flex;flex-direction:column;gap:16px}
+
+/* KPI */
+.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px}
+.metric{background:var(--surface);border:.5px solid var(--border);border-radius:var(--r-lg);padding:16px 18px}
+.metric-label{font-size:10px;color:var(--text3);margin-bottom:6px}
+.metric-value{font-size:28px;font-weight:500;line-height:1}
+.metric-sub{font-size:10px;color:var(--text3);margin-top:4px}
+.metric.red .metric-value{color:var(--red)}
+.metric.amber .metric-value{color:var(--amber)}
+.metric.dark .metric-value{color:var(--text2)}
+
+/* alert cards */
+.alerts{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px}
+.alert-card{background:var(--surface);border:.5px solid var(--border);border-radius:var(--r-lg);padding:16px}
+.alert-header{display:flex;align-items:center;gap:8px;margin-bottom:12px}
+.alert-title{font-size:13px;font-weight:500}
+.alert-count{font-size:11px;padding:2px 8px;border-radius:10px;font-weight:500}
+.alert-red .alert-count{background:rgba(216,90,48,.12);color:var(--red)}
+.alert-amber .alert-count{background:rgba(186,117,23,.1);color:var(--amber)}
+.alert-dark .alert-count{background:rgba(0,0,0,.08);color:var(--text2)}
+@media(prefers-color-scheme:dark){
+  .alert-dark .alert-count{background:rgba(255,255,255,.1);color:var(--text2)}
+}
+.alert-list{display:flex;flex-direction:column;gap:6px;max-height:220px;overflow-y:auto}
+.alert-item{display:flex;justify-content:space-between;align-items:center;font-size:12px;padding:5px 8px;border-radius:6px;background:var(--surface2)}
+.alert-item-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text)}
+.alert-item-meta{font-size:11px;color:var(--text3);white-space:nowrap;margin-left:8px}
+.empty-note{font-size:12px;color:var(--text3);text-align:center;padding:20px 0}
+
+/* table */
+.card{background:var(--surface);border:.5px solid var(--border);border-radius:var(--r-lg);padding:20px}
+.card-title{font-size:13px;font-weight:500;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between}
+.search-box{padding:4px 10px;font-size:12px;border:.5px solid var(--border2);border-radius:var(--r-md);background:var(--surface2);color:var(--text);font-family:inherit;width:200px}
+.search-box:focus{outline:none;border-color:var(--accent)}
+.tbl-wrap{overflow:auto;max-height:520px}
+table{width:100%;border-collapse:collapse;font-size:12px}
+thead th{position:sticky;top:0;background:var(--surface);padding:7px 10px;text-align:left;font-weight:500;color:var(--text2);border-bottom:.5px solid var(--border);white-space:nowrap;cursor:pointer;user-select:none}
+thead th:hover{color:var(--text)}
+thead th.sorted-asc::after{content:' ↑'}
+thead th.sorted-desc::after{content:' ↓'}
+tbody td{padding:6px 10px;border-bottom:.5px solid var(--border);white-space:nowrap}
+tbody tr:last-child td{border-bottom:none}
+tbody tr:hover td{background:var(--surface2)}
+.td-name{max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:500}
+.badge-ok{background:rgba(29,158,117,.12);color:var(--green)}
+.badge-warn{background:rgba(186,117,23,.1);color:var(--amber)}
+.badge-err{background:rgba(216,90,48,.1);color:var(--red)}
+.badge-eol{background:rgba(0,0,0,.1);color:var(--text2)}
+.badge-zero{background:rgba(0,0,0,.05);color:var(--text3)}
+@media(prefers-color-scheme:dark){
+  .badge-eol{background:rgba(255,255,255,.1);color:var(--text2)}
+  .badge-zero{background:rgba(255,255,255,.05);color:var(--text3)}
+}
+.num{text-align:right}
+.banner{border-radius:var(--r-md);padding:9px 12px;font-size:12px;display:flex;gap:7px}
+.banner.err{background:rgba(216,90,48,.1);color:var(--red)}
+.status-filter{display:flex;gap:4px;flex-wrap:wrap}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="hdr">
+    <div class="logo">銷售儀表板</div>
+    <div class="nav-links">
+      <a href="index.html" class="nav-link">銷售</a>
+      <a href="inventory.html" class="nav-link active">庫存健康度</a>
+    </div>
+    <div class="spacer"></div>
+    <span class="dot" id="dot"></span>
+    <span id="hdr-text">載入中…</span>
+    <button class="btn" onclick="loadAll()" style="margin-left:8px">↻ 重新讀取</button>
+  </div>
+</header>
+
+<div class="filter-area" id="filter-area">
+  <div class="filter-inner">
+    <div class="filter-row">
+      <span class="filter-label">品牌</span>
+      <div class="tags" id="brand-tags"></div>
+    </div>
+    <div class="filter-divider"></div>
+    <div class="filter-row">
+      <span class="filter-label">狀態</span>
+      <div class="tags status-filter" id="status-tags">
+        <span class="tag all-tag active" data-status="all" onclick="setStatusFilter('all',this)">全部</span>
+        <span class="tag" data-status="缺貨風險" onclick="setStatusFilter('缺貨風險',this)">🔴 缺貨風險</span>
+        <span class="tag" data-status="庫存偏高" onclick="setStatusFilter('庫存偏高',this)">🟡 庫存偏高</span>
+        <span class="tag" data-status="EOL待清" onclick="setStatusFilter('EOL待清',this)">⚫ EOL 待清</span>
+        <span class="tag" data-status="正常" onclick="setStatusFilter('正常',this)">🟢 正常</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="page">
+  <div id="banner"></div>
+
+  <div class="metrics" id="metrics" style="display:none">
+    <div class="metric">
+      <div class="metric-label">有庫存 SKU</div>
+      <div class="metric-value" id="m-skus">—</div>
+      <div class="metric-sub">個品項</div>
+    </div>
+    <div class="metric red">
+      <div class="metric-label">🔴 缺貨風險</div>
+      <div class="metric-value" id="m-risk">—</div>
+      <div class="metric-sub">可售 &lt; 1.5 個月</div>
+    </div>
+    <div class="metric amber">
+      <div class="metric-label">🟡 庫存偏高</div>
+      <div class="metric-value" id="m-slow">—</div>
+      <div class="metric-sub">可售 &gt; 6 個月</div>
+    </div>
+    <div class="metric dark">
+      <div class="metric-label">⚫ EOL 待清</div>
+      <div class="metric-value" id="m-eol">—</div>
+      <div class="metric-sub">近 3 月無銷售</div>
+    </div>
+  </div>
+
+  <div class="alerts" id="alerts" style="display:none">
+    <div class="alert-card alert-red">
+      <div class="alert-header">
+        <span class="alert-title">🔴 缺貨風險</span>
+        <span class="alert-count" id="risk-count">0</span>
+      </div>
+      <div class="alert-list" id="risk-list"></div>
+    </div>
+    <div class="alert-card alert-amber">
+      <div class="alert-header">
+        <span class="alert-title">🟡 庫存偏高</span>
+        <span class="alert-count" id="slow-count">0</span>
+      </div>
+      <div class="alert-list" id="slow-list"></div>
+    </div>
+    <div class="alert-card alert-dark">
+      <div class="alert-header">
+        <span class="alert-title">⚫ EOL 待清</span>
+        <span class="alert-count" id="eol-count">0</span>
+      </div>
+      <div class="alert-list" id="eol-list"></div>
+    </div>
+  </div>
+
+  <div class="card" id="tbl-card" style="display:none">
+    <div class="card-title">
+      <span>庫存明細</span>
+      <input class="search-box" id="search" placeholder="搜尋品名 / SKU…" oninput="renderTable()">
+    </div>
+    <div class="tbl-wrap">
+      <table id="inv-table">
+        <thead>
+          <tr>
+            <th onclick="sortBy('code')">SKU</th>
+            <th onclick="sortBy('name')">品名</th>
+            <th onclick="sortBy('brand')">品牌</th>
+            <th onclick="sortBy('qty')" class="num">庫存數量</th>
+            <th onclick="sortBy('avg3')" class="num">近 3 月均銷</th>
+            <th onclick="sortBy('months')" class="num">可售月份</th>
+            <th onclick="sortBy('reorder')" class="num">再訂購點</th>
+            <th onclick="sortBy('status')">狀態</th>
+          </tr>
+        </thead>
+        <tbody id="inv-tbody"></tbody>
+      </table>
+    </div>
+    <div id="tbl-foot" style="font-size:11px;color:var(--text3);margin-top:10px;text-align:right"></div>
+  </div>
+</div>
+
+<script>
+const SPREADSHEET_ID='1N87NXPJuRNXyuONZOJyIN5iyMdpgmykx_iTGWAZSgW0';
+const MASTER_SHEET='✨「計算表」季節性加權';
+const SCOPE='https://www.googleapis.com/auth/spreadsheets.readonly';
+const TOKEN_URL='https://oauth2.googleapis.com/token';
+
+let saKey=null,accessToken=null,tokenExpiry=0;
+let allItems=[];
+let selectedBrand=null; // null = 全部
+let statusFilter='all';
+let sortKey='status',sortDir=1;
+
+function setDot(s,t){document.getElementById('dot').className='dot '+s;document.getElementById('hdr-text').textContent=t}
+function showBanner(type,msg){
+  const el=document.getElementById('banner');
+  if(!msg){el.innerHTML='';return;}
+  el.innerHTML=`<div class="banner ${type}">${type==='ok'?'✓':'⚠'} ${msg}</div>`;
+}
+
+function b64url(d){const b=typeof d==='string'?btoa(unescape(encodeURIComponent(d))):btoa(String.fromCharCode(...new Uint8Array(d)));return b.replace(/=/g,'').replace(/\+/g,'-').replace(/\//g,'_')}
+async function getToken(){
+  if(accessToken&&Date.now()<tokenExpiry-30000)return accessToken;
+  const now=Math.floor(Date.now()/1000);
+  const h=b64url(JSON.stringify({alg:'RS256',typ:'JWT'}));
+  const p=b64url(JSON.stringify({iss:saKey.client_email,scope:SCOPE,aud:TOKEN_URL,iat:now,exp:now+3600}));
+  const si=`${h}.${p}`;
+  const pem=saKey.private_key.replace(/-----BEGIN PRIVATE KEY-----/,'').replace(/-----END PRIVATE KEY-----/,'').replace(/\n/g,'');
+  const kb=Uint8Array.from(atob(pem),c=>c.charCodeAt(0));
+  const ck=await crypto.subtle.importKey('pkcs8',kb,{name:'RSASSA-PKCS1-v1_5',hash:'SHA-256'},false,['sign']);
+  const sig=await crypto.subtle.sign('RSASSA-PKCS1-v1_5',ck,new TextEncoder().encode(si));
+  const jwt=`${si}.${b64url(sig)}`;
+  const res=await fetch(TOKEN_URL,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:`grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=${jwt}`});
+  const d=await res.json();
+  if(!d.access_token)throw new Error(d.error_description||'Token失敗');
+  accessToken=d.access_token;tokenExpiry=Date.now()+(d.expires_in||3600)*1000;
+  return accessToken;
+}
+async function apiGet(url){
+  const tok=await getToken();
+  const res=await fetch(url,{headers:{Authorization:`Bearer ${tok}`}});
+  if(!res.ok){const e=await res.json().catch(()=>({}));throw new Error(e.error?.message||`HTTP ${res.status}`)}
+  return res.json();
+}
+
+/* Brand normalization (same as index.html) */
+const BRAND_NORMALIZE={'Scosche':'SCOSCHE','MARLEY_OLD':'MARLEY','PHILIPS':'Philips'};
+function normBrand(b){return BRAND_NORMALIZE[b]||b;}
+
+/* Status classification */
+function classifyStatus(qty,avg3,months,reorder){
+  if(qty<=0)return '零庫存';
+  if(avg3<=0)return 'EOL待清';
+  if(months<1.5)return '缺貨風險';
+  if(months>6)return '庫存偏高';
+  return '正常';
+}
+
+async function loadAll(){
+  setDot('spin','讀取中…');
+  try{
+    const res=await apiGet(`https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent(MASTER_SHEET+'!A:S')}`);
+    parseMaster(res.values||[]);
+    buildFilters();
+    renderKPIs();
+    renderAlerts();
+    renderTable();
+    document.getElementById('filter-area').style.display='block';
+    document.getElementById('metrics').style.display='grid';
+    document.getElementById('alerts').style.display='grid';
+    document.getElementById('tbl-card').style.display='block';
+    setDot('ok',`已更新 ${new Date().toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit'})}`);
+  }catch(e){
+    setDot('err','讀取失敗');
+    showBanner('err','讀取失敗：'+e.message);
+  }
+}
+
+function parseMaster(rows){
+  allItems=[];
+  if(!rows.length)return;
+  // Header row: A=狀態,B=商品ID,C=品牌,D=商品名稱,E=類別,
+  // K(10)=安全庫存,M(12)=再訂購點,N(13)=需訂購量,
+  // Q(16)=銷售月數(可售月份),R(17)=全部庫存,S(18)=平均3個月月銷
+  rows.slice(1).forEach(r=>{
+    const code=String(r[1]||'').trim();
+    if(!code||!/^[A-Z]\d{4,}/.test(code))return;
+    const brand=normBrand(String(r[2]||'').trim())||'其他';
+    const name=String(r[3]||'').trim();
+    const cat=String(r[4]||'').trim();
+    const qty=parseNum(r[17]);
+    const avg3=parseNum(r[18]);
+    const months=avg3>0?parseFloat((qty/avg3).toFixed(1)):qty>0?999:0;
+    const reorder=parseNum(r[12]);
+    const status=classifyStatus(qty,avg3,months,reorder);
+    allItems.push({code,brand,name,cat,qty,avg3,months,reorder,status});
+  });
+}
+
+function parseNum(v){
+  const n=parseFloat(String(v||'0').replace(/,/g,''));
+  return isNaN(n)?0:n;
+}
+
+/* filters */
+function buildFilters(){
+  const brands=[...new Set(allItems.map(x=>x.brand))].filter(Boolean).sort();
+  const el=document.getElementById('brand-tags');
+  el.innerHTML='';
+  const allTag=document.createElement('span');
+  allTag.className='tag all-tag'+(selectedBrand===null?' active':'');
+  allTag.textContent='全部';
+  allTag.onclick=()=>{selectedBrand=null;buildFilters();renderAll();};
+  el.appendChild(allTag);
+  brands.forEach(b=>{
+    const t=document.createElement('span');
+    t.className='tag'+(selectedBrand===b?' active':'');
+    t.textContent=b;
+    t.onclick=()=>{selectedBrand=(selectedBrand===b?null:b);buildFilters();renderAll();};
+    el.appendChild(t);
+  });
+}
+
+function setStatusFilter(s,el){
+  statusFilter=s;
+  document.querySelectorAll('#status-tags .tag').forEach(t=>t.classList.remove('active'));
+  el.classList.add('active');
+  renderKPIs();renderAlerts();renderTable();
+}
+
+function getFiltered(){
+  return allItems.filter(x=>{
+    if(selectedBrand&&x.brand!==selectedBrand)return false;
+    if(statusFilter!=='all'&&x.status!==statusFilter)return false;
+    return true;
+  });
+}
+
+function renderAll(){renderKPIs();renderAlerts();renderTable();}
+
+function renderKPIs(){
+  const base=allItems.filter(x=>selectedBrand?x.brand===selectedBrand:true);
+  const withQty=base.filter(x=>x.qty>0);
+  document.getElementById('m-skus').textContent=withQty.length.toLocaleString();
+  document.getElementById('m-risk').textContent=base.filter(x=>x.status==='缺貨風險').length.toLocaleString();
+  document.getElementById('m-slow').textContent=base.filter(x=>x.status==='庫存偏高').length.toLocaleString();
+  document.getElementById('m-eol').textContent=base.filter(x=>x.status==='EOL待清').length.toLocaleString();
+}
+
+function renderAlerts(){
+  const base=allItems.filter(x=>selectedBrand?x.brand===selectedBrand:true);
+  const risk=base.filter(x=>x.status==='缺貨風險').sort((a,b)=>a.months-b.months);
+  const slow=base.filter(x=>x.status==='庫存偏高').sort((a,b)=>b.months-a.months);
+  const eol=base.filter(x=>x.status==='EOL待清').sort((a,b)=>b.qty-a.qty);
+
+  document.getElementById('risk-count').textContent=risk.length+'件';
+  document.getElementById('slow-count').textContent=slow.length+'件';
+  document.getElementById('eol-count').textContent=eol.length+'件';
+
+  function fillList(listId,items,metaFn){
+    const el=document.getElementById(listId);
+    el.innerHTML='';
+    if(!items.length){el.innerHTML='<div class="empty-note">無預警項目</div>';return;}
+    items.slice(0,15).forEach(x=>{
+      const div=document.createElement('div');div.className='alert-item';
+      div.innerHTML=`<span class="alert-item-name" title="${x.name}">${x.name}</span><span class="alert-item-meta">${metaFn(x)}</span>`;
+      el.appendChild(div);
+    });
+    if(items.length>15){const m=document.createElement('div');m.className='empty-note';m.textContent=`…還有 ${items.length-15} 件`;el.appendChild(m);}
+  }
+  fillList('risk-list',risk,x=>`庫存${x.qty} 可售${x.months===999?'∞':x.months}月`);
+  fillList('slow-list',slow,x=>`可售${x.months===999?'∞':x.months}月`);
+  fillList('eol-list',eol,x=>`庫存${x.qty}`);
+}
+
+/* table */
+let _sortKey='status',_sortDir=1;
+function sortBy(key){
+  if(_sortKey===key)_sortDir*=-1;
+  else{_sortKey=key;_sortDir=1;}
+  document.querySelectorAll('thead th').forEach(th=>{th.classList.remove('sorted-asc','sorted-desc');});
+  // find th that triggered
+  const statusOrder={'缺貨風險':0,'EOL待清':1,'庫存偏高':2,'正常':3,'零庫存':4};
+  renderTable();
+}
+
+function renderTable(){
+  const q=(document.getElementById('search').value||'').toLowerCase();
+  const base=allItems.filter(x=>{
+    if(selectedBrand&&x.brand!==selectedBrand)return false;
+    if(statusFilter!=='all'&&x.status!==statusFilter)return false;
+    if(q&&!x.name.toLowerCase().includes(q)&&!x.code.toLowerCase().includes(q)&&!x.brand.toLowerCase().includes(q))return false;
+    return true;
+  });
+
+  const statusOrder={'缺貨風險':0,'EOL待清':1,'庫存偏高':2,'正常':3,'零庫存':4};
+  base.sort((a,b)=>{
+    let va=a[_sortKey],vb=b[_sortKey];
+    if(_sortKey==='status'){va=statusOrder[va]??5;vb=statusOrder[vb]??5;}
+    if(_sortKey==='months'){va=va===999?9999:va;vb=vb===999?9999:vb;}
+    if(typeof va==='string')return va.localeCompare(vb,'zh-TW')*_sortDir;
+    return(va-vb)*_sortDir;
+  });
+
+  const tbody=document.getElementById('inv-tbody');
+  tbody.innerHTML='';
+  base.forEach(x=>{
+    const tr=document.createElement('tr');
+    const monthsStr=x.months===999?'∞':x.months===0?'—':x.months.toFixed(1);
+    const badgeCls=x.status==='缺貨風險'?'badge-err':x.status==='庫存偏高'?'badge-warn':x.status==='EOL待清'?'badge-eol':x.status==='零庫存'?'badge-zero':'badge-ok';
+    const statusIcon=x.status==='缺貨風險'?'🔴 ':x.status==='庫存偏高'?'🟡 ':x.status==='EOL待清'?'⚫ ':x.status==='零庫存'?'○ ':'🟢 ';
+    tr.innerHTML=`
+      <td style="font-family:monospace;font-size:11px;color:var(--text3)">${x.code}</td>
+      <td class="td-name" title="${x.name}">${x.name}</td>
+      <td>${x.brand}</td>
+      <td class="num">${x.qty.toLocaleString()}</td>
+      <td class="num">${x.avg3>0?x.avg3.toFixed(1):'—'}</td>
+      <td class="num">${monthsStr}</td>
+      <td class="num">${x.reorder>0?x.reorder.toFixed(0):'—'}</td>
+      <td><span class="badge ${badgeCls}">${statusIcon}${x.status}</span></td>`;
+    tbody.appendChild(tr);
+  });
+
+  // update sort indicators
+  const keys=['code','name','brand','qty','avg3','months','reorder','status'];
+  document.querySelectorAll('thead th').forEach((th,i)=>{
+    th.classList.remove('sorted-asc','sorted-desc');
+    if(keys[i]===_sortKey)th.classList.add(_sortDir===1?'sorted-asc':'sorted-desc');
+  });
+
+  document.getElementById('tbl-foot').textContent=`顯示 ${base.length} / ${allItems.length} 筆`;
+}
+
+window.addEventListener('load',async()=>{
+  const raw=localStorage.getItem('sa_key');
+  if(!raw){setDot('err','未連線');showBanner('err','請先在銷售儀表板頁面貼上 Service Account 金鑰');return;}
+  try{saKey=JSON.parse(raw);await loadAll();}
+  catch(e){setDot('err','連線失敗');showBanner('err',e.message);}
+});
+</script>
+</body>
+</html>
