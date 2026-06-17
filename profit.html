@@ -1,0 +1,748 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>毛利分析</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-datalabels/2.2.0/chartjs-plugin-datalabels.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#f5f5f3;--surface:#fff;--surface2:#f1efe8;--surface3:#e8e6df;
+  --border:rgba(0,0,0,.1);--border2:rgba(0,0,0,.18);
+  --text:#1a1a18;--text2:#5f5e5a;--text3:#88877f;
+  --accent:#378ADD;--green:#1d9e75;--red:#d85a30;--amber:#ba7517;
+  --r-md:8px;--r-lg:12px;
+}
+@media(prefers-color-scheme:dark){
+  :root{--bg:#1a1a18;--surface:#242422;--surface2:#2c2c2a;--surface3:#363634;
+    --border:rgba(255,255,255,.09);--border2:rgba(255,255,255,.18);
+    --text:#f0ede8;--text2:#b4b2a9;--text3:#888780;}
+}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;font-size:14px}
+header{background:var(--surface);border-bottom:.5px solid var(--border);padding:0 24px;position:sticky;top:0;z-index:100}
+.hdr{max-width:1400px;margin:0 auto;display:flex;align-items:center;gap:16px;height:52px}
+.logo{font-size:15px;font-weight:600}
+.nav-links{display:flex;gap:4px;margin-left:8px}
+.nav-link{font-size:12px;padding:4px 10px;border-radius:var(--r-md);color:var(--text2);text-decoration:none;transition:all .15s}
+.nav-link:hover{background:var(--surface2);color:var(--text)}
+.nav-link.active{background:var(--surface2);color:var(--text);font-weight:500}
+.spacer{flex:1}
+.dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;background:#ccc;transition:background .3s}
+.dot.ok{background:var(--green)}.dot.err{background:var(--red)}.dot.spin{background:var(--amber);animation:pulse 1s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+#hdr-text{font-size:11px;color:var(--text3)}
+.btn{padding:5px 12px;font-size:12px;border:.5px solid var(--border2);border-radius:var(--r-md);background:var(--surface);color:var(--text);cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:5px;transition:all .1s}
+.btn:hover{background:var(--surface2)}
+
+.filter-area{background:var(--surface);border-bottom:.5px solid var(--border);padding:12px 24px;display:none}
+.filter-inner{max-width:1400px;margin:0 auto;display:flex;flex-direction:column;gap:10px}
+.filter-row{display:flex;align-items:flex-start;gap:10px;flex-wrap:wrap}
+.filter-label{font-size:11px;color:var(--text3);white-space:nowrap;padding-top:5px;min-width:42px;display:flex;align-items:center;gap:5px}
+.tags{display:flex;flex-wrap:wrap;gap:5px;flex:1}
+.tag{padding:4px 11px;font-size:12px;font-family:inherit;border:.5px solid var(--border2);border-radius:20px;cursor:pointer;background:var(--surface2);color:var(--text2);transition:all .15s;user-select:none;white-space:nowrap}
+.tag:hover{border-color:var(--accent);color:var(--accent)}
+.tag.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+.filter-divider{height:.5px;background:var(--border)}
+.collapse-btn{padding:0 4px;font-size:11px;border:.5px solid var(--border2);border-radius:4px;background:var(--surface2);color:var(--text3);cursor:pointer;line-height:16px;transition:transform .2s;font-family:inherit}
+.collapse-btn.collapsed{transform:rotate(-90deg)}
+
+.page{max-width:1400px;margin:0 auto;padding:20px 24px;display:flex;flex-direction:column;gap:16px}
+.banner{border-radius:var(--r-md);padding:9px 12px;font-size:12px;display:flex;gap:7px}
+.banner.err{background:rgba(216,90,48,.1);color:var(--red)}
+.banner.warn{background:rgba(186,117,23,.1);color:var(--amber)}
+
+.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}
+.metric{background:var(--surface);border:.5px solid var(--border);border-radius:var(--r-lg);padding:16px 18px}
+.metric-label{font-size:10px;color:var(--text3);margin-bottom:6px}
+.metric-value{font-size:22px;font-weight:500;line-height:1;word-break:break-all}
+.metric-sub{font-size:10px;color:var(--text3);margin-top:4px}
+.metric.green .metric-value{color:var(--green)}
+.metric.blue .metric-value{color:var(--accent)}
+.metric.amber .metric-value{color:var(--amber)}
+
+.card{background:var(--surface);border:.5px solid var(--border);border-radius:var(--r-lg);padding:20px}
+.card-title{font-size:13px;font-weight:500;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px}
+.chart-wrap{position:relative;width:100%;height:260px}
+.chart-wrap.tall{height:400px}
+
+.grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:1100px){.grid-3{grid-template-columns:1fr 1fr}}
+@media(max-width:700px){.grid-3,.grid-2{grid-template-columns:1fr}}
+
+.search-box{padding:4px 10px;font-size:12px;border:.5px solid var(--border2);border-radius:var(--r-md);background:var(--surface2);color:var(--text);font-family:inherit;width:200px}
+.search-box:focus{outline:none;border-color:var(--accent)}
+.tbl-wrap{overflow:auto;max-height:480px}
+table{width:100%;border-collapse:collapse;font-size:12px}
+thead th{position:sticky;top:0;background:var(--surface);padding:7px 10px;text-align:left;font-weight:500;color:var(--text2);border-bottom:.5px solid var(--border);white-space:nowrap;cursor:pointer;user-select:none}
+thead th:hover{color:var(--text)}
+thead th.sorted-asc::after{content:' ↑'}
+thead th.sorted-desc::after{content:' ↓'}
+tbody td{padding:7px 10px;border-bottom:.5px solid var(--border)}
+tbody tr:last-child td{border-bottom:none}
+tbody tr:hover td{background:var(--surface2)}
+.num{text-align:right}
+.td-name{max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tbl-foot{font-size:11px;color:var(--text3);margin-top:10px;text-align:right}
+.cost-note{font-size:11px;color:var(--amber);margin-left:8px}
+.tog-group{display:flex;gap:3px}
+.tog{padding:3px 9px;font-size:11px;border:.5px solid var(--border2);border-radius:16px;cursor:pointer;background:var(--surface2);color:var(--text2);user-select:none;white-space:nowrap;font-family:inherit}
+.tog:hover{border-color:var(--accent);color:var(--accent)}
+.tog.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="hdr">
+    <div class="logo">銷售儀表板</div>
+    <div class="nav-links">
+      <a href="index.html" class="nav-link">銷售</a>
+      <a href="profit.html" class="nav-link active">毛利分析</a>
+      <a href="inventory.html" class="nav-link">庫存健康度</a>
+    </div>
+    <div class="spacer"></div>
+    <span class="dot" id="dot"></span>
+    <span id="hdr-text">載入中…</span>
+    <button class="btn" onclick="loadAll()" style="margin-left:8px">↻ 重新讀取</button>
+  </div>
+</header>
+
+<div class="filter-area" id="filter-area">
+  <div class="filter-inner">
+    <div class="filter-row">
+      <span class="filter-label">品牌</span>
+      <div class="tags" id="brand-tags"></div>
+    </div>
+    <div id="cat-row" style="display:none">
+      <div class="filter-divider" style="margin:6px 0"></div>
+      <div class="filter-row">
+        <span class="filter-label">類別<button class="collapse-btn" onclick="toggleCollapse('cat-tags-wrap')">▾</button></span>
+        <div id="cat-tags-wrap"><div class="tags" id="cat-tags"></div></div>
+      </div>
+    </div>
+    <div id="prod-row" style="display:none">
+      <div class="filter-divider" style="margin:6px 0"></div>
+      <div class="filter-row">
+        <span class="filter-label">產品<button class="collapse-btn" onclick="toggleCollapse('prod-tags-wrap')">▾</button></span>
+        <div id="prod-tags-wrap"><div class="tags" id="prod-tags"></div></div>
+      </div>
+    </div>
+    <div class="filter-divider"></div>
+    <div id="month-rows"></div>
+  </div>
+</div>
+
+<div class="page">
+  <div id="banner"></div>
+
+  <!-- KPI -->
+  <div class="metrics" id="metrics" style="display:none">
+    <div class="metric green">
+      <div class="metric-label">本月營收金額</div>
+      <div class="metric-value" id="k-rev-month">—</div>
+      <div class="metric-sub" id="k-rev-month-lbl">—</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">選期營收合計</div>
+      <div class="metric-value" id="k-rev-total">—</div>
+      <div class="metric-sub" id="k-rev-total-lbl">—</div>
+    </div>
+    <div class="metric blue">
+      <div class="metric-label">本月毛利</div>
+      <div class="metric-value" id="k-profit-month">—</div>
+      <div class="metric-sub" id="k-profit-month-lbl">—</div>
+    </div>
+    <div class="metric amber">
+      <div class="metric-label">本月毛利率</div>
+      <div class="metric-value" id="k-margin-month">—</div>
+      <div class="metric-sub" id="k-margin-month-sub">毛利/營收</div>
+    </div>
+  </div>
+
+  <!-- Trend charts -->
+  <div class="grid-3" id="trend-row" style="display:none">
+    <div class="card">
+      <div class="card-title">每月營收金額</div>
+      <div class="chart-wrap"><canvas id="revChart"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-title">每月毛利</div>
+      <div class="chart-wrap"><canvas id="profitChart"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-title">每月毛利率</div>
+      <div class="chart-wrap"><canvas id="marginChart"></canvas></div>
+    </div>
+  </div>
+
+  <!-- Rankings -->
+  <div class="grid-2" id="rank-row" style="display:none">
+    <div class="card">
+      <div class="card-title">
+        <span>品牌排名</span>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <div class="tog-group">
+            <span class="tog active" id="bm-rev" onclick="setBrandMetric('rev')">營收</span>
+            <span class="tog" id="bm-profit" onclick="setBrandMetric('profit')">毛利</span>
+          </div>
+          <div class="tog-group">
+            <span class="tog active" id="bl-10" onclick="setBrandLimit(10)">前10</span>
+            <span class="tog" id="bl-all" onclick="setBrandLimit(0)">全部</span>
+          </div>
+        </div>
+      </div>
+      <div class="chart-wrap tall" id="brand-rank-wrap"><canvas id="brandChart"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-title">
+        <span>商品排名</span>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <div class="tog-group">
+            <span class="tog active" id="sm-rev" onclick="setSkuMetric('rev')">營收</span>
+            <span class="tog" id="sm-profit" onclick="setSkuMetric('profit')">毛利</span>
+          </div>
+          <div class="tog-group">
+            <span class="tog active" id="sl-20" onclick="setSkuLimit(20)">前20</span>
+            <span class="tog" id="sl-all" onclick="setSkuLimit(0)">全部</span>
+          </div>
+        </div>
+      </div>
+      <div class="chart-wrap tall" id="sku-rank-wrap"><canvas id="skuChart"></canvas></div>
+    </div>
+  </div>
+
+  <!-- Detail table -->
+  <div class="card" id="tbl-card" style="display:none">
+    <div class="card-title">
+      <span>
+        明細表
+        <span id="cost-note" class="cost-note" style="display:none">⚠ 成本資料未載入，毛利欄位顯示為零</span>
+      </span>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <div class="tog-group">
+          <span class="tog active" id="tbl-sku" onclick="setTableMode('sku')">商品</span>
+          <span class="tog" id="tbl-brand" onclick="setTableMode('brand')">品牌</span>
+        </div>
+        <input class="search-box" id="search" placeholder="搜尋…" oninput="renderTable()">
+      </div>
+    </div>
+    <div class="tbl-wrap">
+      <table>
+        <thead id="tbl-head"></thead>
+        <tbody id="tbl-body"></tbody>
+      </table>
+    </div>
+    <div class="tbl-foot" id="tbl-foot"></div>
+  </div>
+</div>
+
+<script>
+const SPREADSHEET_ID='1N87NXPJuRNXyuONZOJyIN5iyMdpgmykx_iTGWAZSgW0';
+const SALES_SHEET='ERP銷售資料';
+const MASTER_SHEET='✨「計算表」季節性加權';
+const SCOPE='https://www.googleapis.com/auth/spreadsheets.readonly';
+const TOKEN_URL='https://oauth2.googleapis.com/token';
+
+let saKey=null,accessToken=null,tokenExpiry=0;
+let monthData={},allMonths=[],masterBrand={},masterName={},masterCategory={};
+let ecountCosts={},costLoaded=false;
+
+let selectedBrands=new Set(),selectedMonths=new Set(),selectedCategories=new Set(),selectedProducts=new Set();
+let brandMetric='rev',skuMetric='rev',brandLimit=10,skuLimit=20,tableMode='sku';
+let _sortKey='rev',_sortDir=-1;
+
+/* ── Format helpers ── */
+function fmtNTD(v){return 'NT$'+Math.round(v).toLocaleString();}
+function fmtPct(v){return(isFinite(v)&&!isNaN(v)&&v!==null)?((v*100).toFixed(1)+'%'):'—';}
+function fmtNum(v){return Math.round(v).toLocaleString();}
+function fmtAxis(v){return v>=10000?(Math.round(v/10000)+'萬'):v.toLocaleString();}
+
+/* ── Status ── */
+function setDot(s,t){document.getElementById('dot').className='dot '+s;document.getElementById('hdr-text').textContent=t}
+function showBanner(type,msg){
+  const el=document.getElementById('banner');
+  if(!msg){el.innerHTML='';return;}
+  el.innerHTML=`<div class="banner ${type}">${type==='err'?'⚠':type==='warn'?'⚠':'✓'} ${msg}</div>`;
+  if(type==='ok')setTimeout(()=>el.innerHTML='',3000);
+}
+
+/* ── JWT ── */
+function b64url(d){const b=typeof d==='string'?btoa(unescape(encodeURIComponent(d))):btoa(String.fromCharCode(...new Uint8Array(d)));return b.replace(/=/g,'').replace(/\+/g,'-').replace(/\//g,'_')}
+async function getToken(){
+  if(accessToken&&Date.now()<tokenExpiry-30000)return accessToken;
+  const now=Math.floor(Date.now()/1000);
+  const h=b64url(JSON.stringify({alg:'RS256',typ:'JWT'}));
+  const p=b64url(JSON.stringify({iss:saKey.client_email,scope:SCOPE,aud:TOKEN_URL,iat:now,exp:now+3600}));
+  const si=`${h}.${p}`;
+  const pem=saKey.private_key.replace(/-----BEGIN PRIVATE KEY-----/,'').replace(/-----END PRIVATE KEY-----/,'').replace(/\n/g,'');
+  const kb=Uint8Array.from(atob(pem),c=>c.charCodeAt(0));
+  const ck=await crypto.subtle.importKey('pkcs8',kb,{name:'RSASSA-PKCS1-v1_5',hash:'SHA-256'},false,['sign']);
+  const sig=await crypto.subtle.sign('RSASSA-PKCS1-v1_5',ck,new TextEncoder().encode(si));
+  const jwt=`${si}.${b64url(sig)}`;
+  const res=await fetch(TOKEN_URL,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:`grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=${jwt}`});
+  const d=await res.json();
+  if(!d.access_token)throw new Error(d.error_description||'Token失敗');
+  accessToken=d.access_token;tokenExpiry=Date.now()+(d.expires_in||3600)*1000;
+  return accessToken;
+}
+async function apiGet(url){
+  const tok=await getToken();
+  const res=await fetch(url,{headers:{Authorization:`Bearer ${tok}`}});
+  if(!res.ok){const e=await res.json().catch(()=>({}));throw new Error(e.error?.message||`HTTP ${res.status}`)}
+  return res.json();
+}
+
+/* ── Brand detection (matches index.html) ── */
+const BRAND_NORMALIZE={'Scosche':'SCOSCHE','MARLEY_OLD':'MARLEY','PHILIPS':'Philips'};
+const CODE_BRAND_OVERRIDES={'G00004555':'JLab','G00004564':'JLab','G00005375':'JLab','G00009160':'JBL'};
+const NAME_BRAND_PREFIXES=[
+  ['myFirst','myFirst'],['Marshall','Marshall'],['JBL','JBL'],['JLab','JLab'],
+  ['GO Air','JLab'],['WONDERBOOM','UE'],['Marley','MARLEY'],
+  ['鐵三角','鐵三角'],['DOSHISHA','DOSHISHA'],['Harman','Harman Kardon'],
+  ['EarFun','EarFun'],['Cardo','Cardo'],['Cricut','Cricut'],
+  ['UE ','UE'],['Enacfire','Enacfire'],['Blue ','Blue Microphones'],
+];
+function normBrand(b){return BRAND_NORMALIZE[b]||b;}
+function detectBrand(code,name){
+  if(masterBrand[code])return masterBrand[code];
+  if(CODE_BRAND_OVERRIDES[code])return CODE_BRAND_OVERRIDES[code];
+  const m=name.match(/【(.+?)】/);if(m)return m[1];
+  for(const[prefix,brand]of NAME_BRAND_PREFIXES){if(name.startsWith(prefix))return brand;}
+  return '其他';
+}
+
+/* ── ECOUNT cost (read from localStorage cache first) ── */
+const COST_CACHE_KEY='ecount_costs',COST_TS_KEY='ecount_costs_ts',COST_TTL=24*60*60*1000;
+async function loadEcountCosts(){
+  const ts=parseInt(localStorage.getItem(COST_TS_KEY)||'0');
+  if(Date.now()-ts<COST_TTL){
+    try{const c=JSON.parse(localStorage.getItem(COST_CACHE_KEY)||'{}');if(Object.keys(c).length>0){ecountCosts=c;costLoaded=true;return;}}catch(e){}
+  }
+  try{
+    const lr=await fetch('https://oapiib.ecount.com/OAPI/V2/OAPILogin',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({COM_CODE:'703642',USER_ID:'ERIC',API_CERT_KEY:'07eb3d9d3cc684397a69ddce49879d8c57',LAN_TYPE:'zh-TW',ZONE:'ib'})});
+    const ld=await lr.json();
+    const sid=ld?.Data?.Datas?.SESSION_ID||ld?.Data?.SESSION_ID;
+    if(!sid)return;
+    const pr=await fetch(`https://oapiib.ecount.com/OAPI/V2/InventoryBasic/GetBasicProductsList?SESSION_ID=${sid}`,
+      {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({FROM_PROD_CD:'A00000000',TO_PROD_CD:'Z99999999'})});
+    const pd=await pr.json();
+    const items=pd?.Data?.Result||[];
+    const map={};items.forEach(x=>{const c=parseFloat(x.IN_PRICE||0);if(x.PROD_CD&&c>0)map[x.PROD_CD]=c;});
+    ecountCosts=map;costLoaded=true;
+    localStorage.setItem(COST_CACHE_KEY,JSON.stringify(map));
+    localStorage.setItem(COST_TS_KEY,String(Date.now()));
+  }catch(e){console.warn('ECOUNT cost (CORS?):', e.message);}
+}
+
+/* ── Load ── */
+async function loadAll(){
+  setDot('spin','讀取中…');
+  try{
+    const[sRes,mRes]=await Promise.all([
+      apiGet(`https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent(SALES_SHEET)}`),
+      apiGet(`https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent(MASTER_SHEET+'!B:E')}`)
+    ]);
+    await loadEcountCosts();
+    parseMaster(mRes.values||[]);
+    parseSales(sRes.values||[]);
+    buildFilters();
+    showAll();
+    renderAll();
+    setDot('ok',`已更新 ${new Date().toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit'})}`);
+    if(!costLoaded)showBanner('warn','成本資料未載入（CORS 限制），毛利欄位無法計算');
+  }catch(e){setDot('err','讀取失敗');showBanner('err','讀取失敗：'+e.message);}
+}
+
+function showAll(){
+  document.getElementById('filter-area').style.display='block';
+  document.getElementById('metrics').style.display='grid';
+  document.getElementById('trend-row').style.display='grid';
+  document.getElementById('rank-row').style.display='grid';
+  document.getElementById('tbl-card').style.display='block';
+  document.getElementById('cost-note').style.display=costLoaded?'none':'inline';
+}
+
+/* ── Parse master ── */
+function parseMaster(rows){
+  masterBrand={};masterName={};masterCategory={};
+  rows.slice(1).forEach(r=>{
+    const id=String(r[0]||'').trim();
+    if(!id)return;
+    const brand=normBrand(String(r[1]||'').trim());
+    const name=String(r[2]||'').trim();
+    const cat=String(r[3]||'').trim();
+    if(brand)masterBrand[id]=brand;
+    if(name)masterName[id]=name;
+    if(cat)masterCategory[id]=cat;
+  });
+}
+
+/* ── Parse sales ── */
+function parseSales(rows){
+  if(!rows.length)return;
+  const hdr=rows[0].map(h=>String(h).trim());
+  const fi=(...kws)=>{for(const k of kws){const i=hdr.findIndex(h=>h.includes(k));if(i>=0)return i;}return -1;};
+  const dateIdx=fi('日期轉換'),nameIdx=fi('品項名稱','商品名稱'),codeIdx=fi('品項編碼','商品ID');
+  const qtyIdx=hdr.findIndex(h=>h==='數量'),revIdx=fi('合計');
+  monthData={};const mSet=new Set();
+  rows.slice(1).forEach(r=>{
+    const date=String(r[dateIdx]||'').trim();
+    if(!/^\d{4}\/\d{1,2}$/.test(date))return;
+    const code=String(r[codeIdx]||'').trim();
+    const name=String(r[nameIdx]||'').trim();
+    const qty=parseFloat(String(r[qtyIdx]||'0').replace(/,/g,''))||0;
+    const rev=revIdx>=0?parseFloat(String(r[revIdx]||'0').replace(/,/g,''))||0:0;
+    const costPerUnit=ecountCosts[code]||0;
+    const cost=qty*costPerUnit;
+    const brand=detectBrand(code,name);
+    const[y,mo]=date.split('/');const key=y+mo.padStart(2,'0');
+    mSet.add(key);
+    if(!monthData[key])monthData[key]={brands:{},codes:{}};
+    const bd=monthData[key].brands;
+    if(!bd[brand])bd[brand]={qty:0,rev:0,cost:0};
+    bd[brand].qty+=qty;bd[brand].rev+=rev;bd[brand].cost+=cost;
+    if(code){
+      const cd=monthData[key].codes;
+      if(!cd[code])cd[code]={qty:0,rev:0,cost:0};
+      cd[code].qty+=qty;cd[code].rev+=rev;cd[code].cost+=cost;
+    }
+  });
+  allMonths=[...mSet].sort();
+}
+
+/* ── Filters ── */
+function buildFilters(){
+  const brands=[...new Set(Object.values(masterBrand))].filter(Boolean).sort();
+  selectedBrands=new Set();selectedCategories=new Set();selectedProducts=new Set();
+  selectedMonths=new Set();
+  [...allMonths].reverse().slice(0,12).forEach(m=>selectedMonths.add(m));
+  renderBrandTags(brands);renderCatProdRows();renderMonthTags();
+}
+
+function renderBrandTags(brands){
+  const el=document.getElementById('brand-tags');el.innerHTML='';
+  const allTag=document.createElement('span');
+  allTag.className='tag all-tag'+(selectedBrands.size===0?' active':'');
+  allTag.textContent='全部';
+  allTag.onclick=()=>{selectedBrands.clear();renderBrandTags(brands);renderCatProdRows();renderAll();};
+  el.appendChild(allTag);
+  brands.forEach(b=>{
+    const t=document.createElement('span');
+    t.className='tag'+(selectedBrands.has(b)?' active':'');t.textContent=b;
+    t.onclick=(e)=>{
+      if(e.ctrlKey||e.metaKey){if(selectedBrands.has(b))selectedBrands.delete(b);else selectedBrands.add(b);}
+      else{if(selectedBrands.size===1&&selectedBrands.has(b))selectedBrands.clear();else{selectedBrands.clear();selectedBrands.add(b);}}
+      renderBrandTags(brands);renderCatProdRows();renderAll();
+    };el.appendChild(t);
+  });
+}
+
+function renderCatProdRows(){
+  const activeBrands=getActiveBrands();
+  const catRow=document.getElementById('cat-row'),prodRow=document.getElementById('prod-row');
+  if(!activeBrands){catRow.style.display='none';prodRow.style.display='none';selectedCategories.clear();selectedProducts.clear();return;}
+  const brandCodes=Object.keys(masterBrand).filter(id=>activeBrands.includes(masterBrand[id]));
+  const cats=[...new Set(brandCodes.map(id=>masterCategory[id]).filter(Boolean))].sort();
+  const activeCats=selectedCategories.size?[...selectedCategories]:null;
+  const prodCodes=brandCodes.filter(id=>!activeCats||activeCats.includes(masterCategory[id]));
+
+  catRow.style.display='block';
+  const catEl=document.getElementById('cat-tags');catEl.innerHTML='';
+  const ca=document.createElement('span');ca.className='tag all-tag'+(selectedCategories.size===0?' active':'');ca.textContent='全部';
+  ca.onclick=()=>{selectedCategories.clear();selectedProducts.clear();renderCatProdRows();renderAll();};catEl.appendChild(ca);
+  cats.forEach(c=>{const t=document.createElement('span');t.className='tag'+(selectedCategories.has(c)?' active':'');t.textContent=c;
+    t.onclick=(e)=>{if(e.ctrlKey||e.metaKey){if(selectedCategories.has(c))selectedCategories.delete(c);else selectedCategories.add(c);}
+      else{if(selectedCategories.size===1&&selectedCategories.has(c))selectedCategories.clear();else{selectedCategories.clear();selectedCategories.add(c);}}
+      selectedProducts.clear();renderCatProdRows();renderAll();};catEl.appendChild(t);});
+
+  prodRow.style.display='block';
+  const prodEl=document.getElementById('prod-tags');prodEl.innerHTML='';
+  const pa=document.createElement('span');pa.className='tag all-tag'+(selectedProducts.size===0?' active':'');pa.textContent='全部';
+  pa.onclick=()=>{selectedProducts.clear();renderCatProdRows();renderAll();};prodEl.appendChild(pa);
+  prodCodes.forEach(id=>{const label=masterName[id]||id;const t=document.createElement('span');t.className='tag'+(selectedProducts.has(id)?' active':'');t.textContent=label;
+    t.onclick=(e)=>{if(e.ctrlKey||e.metaKey){if(selectedProducts.has(id))selectedProducts.delete(id);else selectedProducts.add(id);}
+      else{if(selectedProducts.size===1&&selectedProducts.has(id))selectedProducts.clear();else{selectedProducts.clear();selectedProducts.add(id);}}
+      renderCatProdRows();renderAll();};prodEl.appendChild(t);});
+}
+
+function renderMonthTags(){
+  const container=document.getElementById('month-rows');container.innerHTML='';
+  const byYear={};allMonths.forEach(m=>{const y=m.slice(0,4);if(!byYear[y])byYear[y]=[];byYear[y].push(m);});
+  const years=Object.keys(byYear).sort().reverse();
+  years.forEach(y=>{
+    const row=document.createElement('div');row.className='filter-row';
+    const lbl=document.createElement('span');lbl.className='filter-label';lbl.textContent=y;row.appendChild(lbl);
+    const tags=document.createElement('div');tags.className='tags';
+    const yearMonths=byYear[y];const allYrActive=yearMonths.every(m=>selectedMonths.has(m));
+    const ayt=document.createElement('span');ayt.className='tag all-tag'+(allYrActive?' active':'');ayt.textContent='全年';
+    ayt.onclick=()=>{if(allYrActive)yearMonths.forEach(m=>selectedMonths.delete(m));else yearMonths.forEach(m=>selectedMonths.add(m));
+      renderMonthTags();renderAll();};tags.appendChild(ayt);
+    yearMonths.forEach(m=>{
+      const t=document.createElement('span');t.className='tag'+(selectedMonths.has(m)?' active':'');t.textContent=m;
+      t.onclick=()=>{if(selectedMonths.has(m))selectedMonths.delete(m);else selectedMonths.add(m);renderMonthTags();renderAll();};
+      tags.appendChild(t);});
+    row.appendChild(tags);container.appendChild(row);
+    if(y!==years[years.length-1]){const div=document.createElement('div');div.className='filter-divider';container.appendChild(div);}
+  });
+}
+
+function toggleCollapse(wrapId){
+  const wrap=document.getElementById(wrapId);const btn=wrap.previousElementSibling.querySelector('.collapse-btn');
+  const collapsed=wrap.style.display==='none';wrap.style.display=collapsed?'':'none';btn.classList.toggle('collapsed',!collapsed);
+}
+
+/* ── Filter accessors ── */
+function getActiveBrands(){return selectedBrands.size?[...selectedBrands]:null;}
+function getActiveMonths(){return selectedMonths.size?[...selectedMonths].sort():allMonths.slice().sort();}
+function getActiveCategories(){return selectedCategories.size?[...selectedCategories]:null;}
+function getActiveProducts(){return selectedProducts.size?[...selectedProducts]:null;}
+
+/* ── Aggregate helpers ── */
+function getMonthlyAgg(){
+  const months=getActiveMonths(),brands=getActiveBrands(),cats=getActiveCategories(),prods=getActiveProducts();
+  return months.map(m=>{
+    const d=monthData[m]||{brands:{},codes:{}};
+    let qty=0,rev=0,cost=0;
+    if(prods){
+      prods.forEach(code=>{const c=d.codes[code]||{};qty+=c.qty||0;rev+=c.rev||0;cost+=c.cost||0;});
+    } else if(cats){
+      const cc=Object.keys(masterCategory).filter(id=>cats.includes(masterCategory[id])&&(!brands||brands.includes(masterBrand[id])));
+      cc.forEach(code=>{const c=d.codes[code]||{};qty+=c.qty||0;rev+=c.rev||0;cost+=c.cost||0;});
+    } else if(brands){
+      brands.forEach(b=>{const c=d.brands[b]||{};qty+=c.qty||0;rev+=c.rev||0;cost+=c.cost||0;});
+    } else {
+      Object.values(d.brands).forEach(c=>{qty+=c.qty||0;rev+=c.rev||0;cost+=c.cost||0;});
+    }
+    const profit=rev-cost,margin=rev>0?(rev-cost)/rev:null;
+    return{month:m,qty,rev,cost,profit,margin};
+  });
+}
+
+function getBrandAgg(){
+  const months=getActiveMonths(),brands=getActiveBrands();
+  const acc={};
+  months.forEach(m=>{
+    const bd=(monthData[m]||{brands:{}}).brands;
+    Object.entries(bd).forEach(([b,c])=>{
+      if(brands&&!brands.includes(b))return;
+      if(!acc[b])acc[b]={qty:0,rev:0,cost:0};
+      acc[b].qty+=c.qty;acc[b].rev+=c.rev;acc[b].cost+=c.cost;
+    });
+  });
+  return Object.entries(acc).map(([brand,c])=>({brand,qty:c.qty,rev:c.rev,cost:c.cost,profit:c.rev-c.cost,margin:c.rev>0?(c.rev-c.cost)/c.rev:null}));
+}
+
+function getSkuAgg(){
+  const months=getActiveMonths(),brands=getActiveBrands(),cats=getActiveCategories(),prods=getActiveProducts();
+  const acc={};
+  months.forEach(m=>{
+    const cd=(monthData[m]||{codes:{}}).codes;
+    Object.entries(cd).forEach(([code,c])=>{
+      if(prods&&!prods.includes(code))return;
+      const b=masterBrand[code]||detectBrand(code,'');
+      if(brands&&!brands.includes(b))return;
+      if(cats&&!cats.includes(masterCategory[code]))return;
+      if(!acc[code])acc[code]={qty:0,rev:0,cost:0};
+      acc[code].qty+=c.qty;acc[code].rev+=c.rev;acc[code].cost+=c.cost;
+    });
+  });
+  return Object.entries(acc).map(([code,c])=>({code,name:masterName[code]||code,brand:masterBrand[code]||'其他',
+    qty:c.qty,rev:c.rev,cost:c.cost,profit:c.rev-c.cost,margin:c.rev>0?(c.rev-c.cost)/c.rev:null}));
+}
+
+/* ── Render all ── */
+function renderAll(){renderKPIs();renderTrendCharts();renderBrandRanking();renderSkuRanking();renderTable();}
+
+/* ── KPIs ── */
+function renderKPIs(){
+  const agg=getMonthlyAgg();
+  const latestMonth=agg[agg.length-1]||{rev:0,cost:0,profit:0,margin:null};
+  const latestKey=getActiveMonths().slice(-1)[0]||'';
+  document.getElementById('k-rev-month').textContent=fmtNTD(latestMonth.rev);
+  document.getElementById('k-rev-month-lbl').textContent=latestKey;
+  document.getElementById('k-rev-total').textContent=fmtNTD(agg.reduce((s,x)=>s+x.rev,0));
+  document.getElementById('k-rev-total-lbl').textContent=`${agg.length} 個月合計`;
+  document.getElementById('k-profit-month').textContent=costLoaded?fmtNTD(latestMonth.profit):'—';
+  document.getElementById('k-profit-month-lbl').textContent=latestKey;
+  document.getElementById('k-margin-month').textContent=costLoaded?fmtPct(latestMonth.margin):'—';
+}
+
+/* ── Trend charts ── */
+let revChart=null,profitChart=null,marginChart=null;
+function lineDS(data,color){
+  return{data,borderColor:color,backgroundColor:color+'22',borderWidth:2,pointRadius:3,pointBackgroundColor:color,fill:true,tension:0.3};
+}
+function lineOpts(yFmt,tooltipFmt){
+  return{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},datalabels:{display:false},
+    tooltip:{callbacks:{label:ctx=>tooltipFmt(ctx.parsed.y)}}},
+    scales:{x:{ticks:{font:{size:10},maxRotation:45,maxTicksLimit:18}},y:{beginAtZero:true,ticks:{font:{size:10},callback:v=>yFmt(v)}}}};
+}
+function renderTrendCharts(){
+  const agg=getMonthlyAgg();
+  const labels=agg.map(x=>x.month);
+  const revData=agg.map(x=>x.rev);
+  const profitData=agg.map(x=>x.profit);
+  const marginData=agg.map(x=>x.margin!==null?parseFloat((x.margin*100).toFixed(2)):null);
+
+  if(revChart)revChart.destroy();
+  revChart=new Chart(document.getElementById('revChart'),{type:'line',
+    data:{labels,datasets:[lineDS(revData,'#1D9E75')]},
+    options:lineOpts(v=>'NT$'+fmtAxis(v),v=>fmtNTD(v))});
+
+  if(profitChart)profitChart.destroy();
+  profitChart=new Chart(document.getElementById('profitChart'),{type:'line',
+    data:{labels,datasets:[lineDS(profitData,'#378ADD')]},
+    options:costLoaded?lineOpts(v=>'NT$'+fmtAxis(v),v=>fmtNTD(v)):lineOpts(v=>v,v=>v+' (無成本)')});
+
+  if(marginChart)marginChart.destroy();
+  marginChart=new Chart(document.getElementById('marginChart'),{type:'line',
+    data:{labels,datasets:[lineDS(marginData,'#BA7517')]},
+    options:lineOpts(v=>v+'%',v=>v+'%')});
+}
+
+/* ── Rankings ── */
+let brandLimit_=10,skuLimit_=20;
+function setBrandMetric(m){brandMetric=m;document.getElementById('bm-rev').classList.toggle('active',m==='rev');document.getElementById('bm-profit').classList.toggle('active',m==='profit');renderBrandRanking();}
+function setBrandLimit(n){brandLimit_=n;document.getElementById('bl-10').classList.toggle('active',n===10);document.getElementById('bl-all').classList.toggle('active',n===0);renderBrandRanking();}
+function setSkuMetric(m){skuMetric=m;document.getElementById('sm-rev').classList.toggle('active',m==='rev');document.getElementById('sm-profit').classList.toggle('active',m==='profit');renderSkuRanking();}
+function setSkuLimit(n){skuLimit_=n;document.getElementById('sl-20').classList.toggle('active',n===20);document.getElementById('sl-all').classList.toggle('active',n===0);renderSkuRanking();}
+
+let brandChart_=null;
+function renderBrandRanking(){
+  const data=getBrandAgg().sort((a,b)=>b[brandMetric]-a[brandMetric]);
+  const show=brandLimit_>0?data.slice(0,brandLimit_):data;
+  const h=Math.max(280,show.length*28);
+  document.getElementById('brand-rank-wrap').style.height=h+'px';
+  const labels=show.map(x=>x.brand);
+  const vals=show.map(x=>Math.round(x[brandMetric]));
+  const mx=Math.max(...vals,1);
+  const colors=vals.map(v=>v/mx>0.6?'#378ADDcc':v/mx>0.3?'#378ADD88':'#378ADD44');
+  if(brandChart_)brandChart_.destroy();
+  brandChart_=new Chart(document.getElementById('brandChart'),{type:'bar',
+    data:{labels,datasets:[{data:vals,backgroundColor:colors,borderWidth:0,borderRadius:3}]},
+    options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false},datalabels:{anchor:'end',align:'end',color:'var(--text2)',font:{size:10},formatter:v=>'NT$'+fmtAxis(v)},
+        tooltip:{callbacks:{label:ctx=>` ${fmtNTD(ctx.parsed.x)}`}}},
+      scales:{x:{position:'top',beginAtZero:true,ticks:{font:{size:9},callback:v=>'NT$'+fmtAxis(v)}},y:{ticks:{font:{size:10}}}}}});
+}
+
+let skuChart_=null;
+function renderSkuRanking(){
+  const data=getSkuAgg().sort((a,b)=>b[skuMetric]-a[skuMetric]);
+  const show=skuLimit_>0?data.slice(0,skuLimit_):data;
+  const h=Math.max(280,show.length*22);
+  document.getElementById('sku-rank-wrap').style.height=h+'px';
+  const labels=show.map(x=>{const n=masterName[x.code]||x.code;return n.length>30?n.slice(0,30)+'…':n;});
+  const vals=show.map(x=>Math.round(x[skuMetric]));
+  const mx=Math.max(...vals,1);
+  const colors=vals.map(v=>v/mx>0.6?'#1D9E75cc':v/mx>0.3?'#1D9E7588':'#1D9E7544');
+  if(skuChart_)skuChart_.destroy();
+  skuChart_=new Chart(document.getElementById('skuChart'),{type:'bar',
+    data:{labels,datasets:[{data:vals,backgroundColor:colors,borderWidth:0,borderRadius:3}]},
+    options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false},datalabels:{display:false},
+        tooltip:{callbacks:{title:ctx=>{const name=masterName[show[ctx[0].dataIndex].code]||show[ctx[0].dataIndex].code;return name;},
+          label:ctx=>` ${fmtNTD(ctx.parsed.x)}`}}},
+      scales:{x:{position:'top',beginAtZero:true,ticks:{font:{size:9},callback:v=>'NT$'+fmtAxis(v)}},y:{ticks:{font:{size:9}}}}}});
+}
+
+/* ── Table ── */
+function setTableMode(m){
+  tableMode=m;
+  document.getElementById('tbl-sku').classList.toggle('active',m==='sku');
+  document.getElementById('tbl-brand').classList.toggle('active',m==='brand');
+  _sortKey=m==='sku'?'rev':'rev';_sortDir=-1;
+  renderTable();
+}
+
+function sortBy(key){
+  if(_sortKey===key)_sortDir*=-1;else{_sortKey=key;_sortDir=-1;}
+  renderTable();
+}
+
+const SKU_COLS=[
+  {key:'code',label:'SKU'},
+  {key:'name',label:'品名'},
+  {key:'brand',label:'品牌'},
+  {key:'qty',label:'銷售數量'},
+  {key:'rev',label:'銷售金額'},
+  {key:'cost',label:'銷售成本'},
+  {key:'profit',label:'毛利'},
+  {key:'margin',label:'毛利率'},
+];
+const BRAND_COLS=[
+  {key:'brand',label:'品牌'},
+  {key:'qty',label:'銷售數量'},
+  {key:'rev',label:'銷售金額'},
+  {key:'cost',label:'銷售成本'},
+  {key:'profit',label:'毛利'},
+  {key:'margin',label:'毛利率'},
+];
+
+function renderTable(){
+  const q=(document.getElementById('search').value||'').toLowerCase();
+  const cols=tableMode==='sku'?SKU_COLS:BRAND_COLS;
+  let rows=tableMode==='sku'?getSkuAgg():getBrandAgg();
+
+  if(q){
+    if(tableMode==='sku')rows=rows.filter(x=>x.name.toLowerCase().includes(q)||x.code.toLowerCase().includes(q)||x.brand.toLowerCase().includes(q));
+    else rows=rows.filter(x=>x.brand.toLowerCase().includes(q));
+  }
+  rows.sort((a,b)=>{
+    let va=a[_sortKey],vb=b[_sortKey];
+    if(va===null)va=_sortDir>0?Infinity:-Infinity;
+    if(vb===null)vb=_sortDir>0?Infinity:-Infinity;
+    if(typeof va==='string')return va.localeCompare(vb,'zh-TW')*_sortDir;
+    return(va-vb)*_sortDir;
+  });
+
+  // Header
+  const thead=document.getElementById('tbl-head');
+  thead.innerHTML='<tr>'+cols.map(c=>{
+    const cls=(c.key==='qty'||c.key==='rev'||c.key==='cost'||c.key==='profit'||c.key==='margin')?' class="num"':'';
+    const sortCls=_sortKey===c.key?(_sortDir>0?' sorted-asc':' sorted-desc'):'';
+    return`<th${cls} class="sorted${sortCls}" onclick="sortBy('${c.key}')">${c.label}</th>`;
+  }).join('')+'</tr>';
+
+  // Body
+  const tbody=document.getElementById('tbl-body');
+  tbody.innerHTML='';
+  rows.forEach(x=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML=cols.map(c=>{
+      if(c.key==='code')return`<td style="font-family:monospace;font-size:11px;color:var(--text3)">${x.code}</td>`;
+      if(c.key==='name')return`<td class="td-name" title="${x.name}">${x.name}</td>`;
+      if(c.key==='brand')return`<td>${x.brand}</td>`;
+      if(c.key==='qty')return`<td class="num">${fmtNum(x.qty)}</td>`;
+      if(c.key==='rev')return`<td class="num">${fmtNTD(x.rev)}</td>`;
+      if(c.key==='cost')return`<td class="num" style="color:${costLoaded&&x.cost>0?'var(--text)':'var(--text3)'}">${costLoaded?fmtNTD(x.cost):'—'}</td>`;
+      if(c.key==='profit'){const pos=(x.profit||0)>=0;return`<td class="num" style="color:${costLoaded?(pos?'var(--green)':'var(--red)'):'var(--text3)'}">${costLoaded?fmtNTD(x.profit):'—'}</td>`;}
+      if(c.key==='margin'){const pos=(x.margin||0)>=0;return`<td class="num" style="color:${costLoaded&&x.margin!==null?(pos?'var(--green)':'var(--red)'):'var(--text3)'}">${costLoaded?fmtPct(x.margin):'—'}</td>`;}
+      return`<td>${x[c.key]??''}</td>`;
+    }).join('');
+    tbody.appendChild(tr);
+  });
+
+  // Update sort indicators
+  document.querySelectorAll('thead th').forEach((th,i)=>{
+    th.classList.remove('sorted-asc','sorted-desc');
+    if(cols[i]&&cols[i].key===_sortKey)th.classList.add(_sortDir>0?'sorted-asc':'sorted-desc');
+  });
+
+  document.getElementById('tbl-foot').textContent=`顯示 ${rows.length} 筆`;
+}
+
+/* ── Init ── */
+window.addEventListener('load',async()=>{
+  const raw=localStorage.getItem('sa_key');
+  if(!raw){setDot('err','未連線');showBanner('err','請先在銷售儀表板頁面貼上 Service Account 金鑰');return;}
+  try{saKey=JSON.parse(raw);await loadAll();}
+  catch(e){setDot('err','連線失敗');showBanner('err',e.message);}
+});
+</script>
+</body>
+</html>
