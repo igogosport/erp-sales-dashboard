@@ -102,6 +102,8 @@ tbody tr:hover td{background:var(--surface2)}
       <span class="filter-label">品牌</span>
       <div class="tags" id="brand-tags"></div>
     </div>
+    <div id="cat-row" style="display:none"><div class="filter-divider"></div><div class="filter-row"><span class="filter-label">類別</span><div class="tags" id="cat-tags"></div></div></div>
+    <div id="prod-row" style="display:none"><div class="filter-divider"></div><div class="filter-row"><span class="filter-label">產品</span><div class="tags" id="prod-tags"></div></div></div>
     <div class="filter-divider"></div>
     <div id="month-rows"></div>
   </div>
@@ -175,11 +177,13 @@ const SCOPE='https://www.googleapis.com/auth/spreadsheets.readonly';
 const TOKEN_URL='https://oauth2.googleapis.com/token';
 
 let saKey=null,accessToken=null,tokenExpiry=0;
-let monthSales={},allMonths=[],masterBrand={},invItems=[];
+let monthSales={},allMonths=[],masterBrand={},masterName={},masterCategory={},invItems=[];
 
 // selected filters: empty Set = all selected
 let selectedBrands=new Set();
 let selectedMonths=new Set();
+let selectedCategories=new Set();
+let selectedProducts=new Set(); // stores product codes
 
 /* status */
 function setDot(s,t){document.getElementById('dot').className='dot '+s;document.getElementById('hdr-text').textContent=t}
@@ -233,7 +237,7 @@ async function loadAll(){
     const [sRes,iRes,mRes]=await Promise.all([
       apiGet(`https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent(SALES_SHEET)}`),
       apiGet(`https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent(INV_SHEET)}`),
-      apiGet(`https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent(MASTER_SHEET+'!B:C')}`)
+      apiGet(`https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent(MASTER_SHEET+'!B:E')}`)
     ]);
     parseMaster(mRes.values||[]);
     parseSales(sRes.values||[]);
@@ -247,13 +251,18 @@ async function loadAll(){
   }
 }
 
-/* parse master brand table (計算表 B=商品ID, C=品牌) */
+/* parse master brand table (計算表 B=ID, C=品牌, D=商品名稱, E=類別) */
 function parseMaster(rows){
-  masterBrand={};
+  masterBrand={};masterName={};masterCategory={};
   rows.slice(1).forEach(r=>{
     const id=String(r[0]||'').trim();
     const brand=String(r[1]||'').trim();
-    if(id&&brand)masterBrand[id]=brand;
+    const name=String(r[2]||'').trim();
+    const cat=String(r[3]||'').trim();
+    if(!id)return;
+    if(brand)masterBrand[id]=brand;
+    if(name)masterName[id]=name;
+    if(cat)masterCategory[id]=cat;
   });
 }
 
@@ -272,12 +281,12 @@ function parseSales(rows){
     const code=String(r[codeIdx]||'').trim();
     const name=String(r[nameIdx]||'').trim();
     const qty=parseFloat(String(r[qtyIdx]||'0').replace(/,/g,''))||0;
-    // brand lookup: master table first, then 【Brand】 pattern
     const brand=masterBrand[code]||(name.match(/【(.+?)】/)||[])[1]||'其他';
     const[y,mo]=date.split('/');const key=y+mo.padStart(2,'0');
     mSet.add(key);
-    if(!monthSales[key])monthSales[key]={};
-    monthSales[key][brand]=(monthSales[key][brand]||0)+qty;
+    if(!monthSales[key])monthSales[key]={brands:{},codes:{}};
+    monthSales[key].brands[brand]=(monthSales[key].brands[brand]||0)+qty;
+    if(code)monthSales[key].codes[code]=(monthSales[key].codes[code]||0)+qty;
   });
   allMonths=[...mSet].sort();
 }
@@ -321,9 +330,82 @@ function renderBrandTags(brands){
         if(selectedBrands.size===1&&selectedBrands.has(b))selectedBrands.clear();
         else{selectedBrands.clear();selectedBrands.add(b);}
       }
-      renderBrandTags(brands);renderAll();
+      renderBrandTags(brands);renderCatProdRows();renderAll();
     };
     el.appendChild(t);
+  });
+}
+
+/* category + product rows (shown when a brand is selected) */
+function renderCatProdRows(){
+  const activeBrands=getActiveBrands();
+  const catRow=document.getElementById('cat-row');
+  const prodRow=document.getElementById('prod-row');
+  if(!activeBrands){
+    catRow.style.display='none';prodRow.style.display='none';
+    selectedCategories.clear();selectedProducts.clear();
+    return;
+  }
+  // products belonging to selected brands
+  const brandCodes=Object.keys(masterBrand).filter(id=>activeBrands.includes(masterBrand[id]));
+  // unique categories for those products
+  const cats=[...new Set(brandCodes.map(id=>masterCategory[id]).filter(Boolean))].sort();
+  // products: filter by selected categories if any
+  const activeCats=selectedCategories.size?[...selectedCategories]:null;
+  const prodCodes=brandCodes.filter(id=>!activeCats||activeCats.includes(masterCategory[id]));
+
+  // render category tags
+  catRow.style.display='block';
+  const catEl=document.getElementById('cat-tags');
+  catEl.innerHTML='';
+  const catAll=document.createElement('span');
+  catAll.className='tag all-tag'+(selectedCategories.size===0?' active':'');
+  catAll.textContent='全部';
+  catAll.onclick=()=>{selectedCategories.clear();selectedProducts.clear();renderCatProdRows();renderAll();};
+  catEl.appendChild(catAll);
+  cats.forEach(c=>{
+    const t=document.createElement('span');
+    t.className='tag'+(selectedCategories.has(c)?' active':'');
+    t.textContent=c;
+    t.onclick=(e)=>{
+      if(e.ctrlKey||e.metaKey){
+        if(selectedCategories.has(c))selectedCategories.delete(c);
+        else selectedCategories.add(c);
+      } else {
+        if(selectedCategories.size===1&&selectedCategories.has(c))selectedCategories.clear();
+        else{selectedCategories.clear();selectedCategories.add(c);}
+      }
+      selectedProducts.clear();
+      renderCatProdRows();renderAll();
+    };
+    catEl.appendChild(t);
+  });
+
+  // render product tags
+  prodRow.style.display='block';
+  const prodEl=document.getElementById('prod-tags');
+  prodEl.innerHTML='';
+  const prodAll=document.createElement('span');
+  prodAll.className='tag all-tag'+(selectedProducts.size===0?' active':'');
+  prodAll.textContent='全部';
+  prodAll.onclick=()=>{selectedProducts.clear();renderCatProdRows();renderAll();};
+  prodEl.appendChild(prodAll);
+  prodCodes.forEach(id=>{
+    const label=masterName[id]||id;
+    const t=document.createElement('span');
+    t.className='tag'+(selectedProducts.has(id)?' active':'');
+    t.textContent=label;
+    t.onclick=(e)=>{
+      if(e.ctrlKey||e.metaKey){
+        if(selectedProducts.has(id))selectedProducts.delete(id);
+        else selectedProducts.add(id);
+      } else {
+        if(selectedProducts.size===1&&selectedProducts.has(id))selectedProducts.clear();
+        else{selectedProducts.clear();selectedProducts.add(id);}
+      }
+      renderCatProdRows();renderAll();
+    };
+    prodEl.appendChild(t);
   });
 }
 
@@ -382,16 +464,20 @@ function renderMonthTags(){
 function buildFilters(){
   const brands=[...new Set(Object.values(masterBrand))].filter(Boolean).sort();
   selectedBrands=new Set();
+  selectedCategories=new Set();
+  selectedProducts=new Set();
   selectedMonths=new Set();
-  // default: latest 12 months
   [...allMonths].reverse().slice(0,12).forEach(m=>selectedMonths.add(m));
   renderBrandTags(brands);
+  renderCatProdRows();
   renderMonthTags();
 }
 
 /* get active filters */
 function getActiveBrands(){return selectedBrands.size?[...selectedBrands]:null;}
 function getActiveMonths(){return selectedMonths.size?[...selectedMonths].sort():null;}
+function getActiveProducts(){return selectedProducts.size?[...selectedProducts]:null;}
+function getActiveCats(){return selectedCategories.size?[...selectedCategories]:null;}
 
 /* render */
 function renderAll(){
@@ -406,12 +492,19 @@ function renderAll(){
 let salesChart=null;
 function renderSales(){
   const brands=getActiveBrands();
+  const prods=getActiveProducts();
+  const cats=getActiveCats();
   const activeMo=getActiveMonths();
   const months=activeMo||allMonths.slice().sort();
   const data=months.map(m=>{
-    const s=monthSales[m]||{};
-    if(!brands)return Object.values(s).reduce((a,b)=>a+b,0);
-    return brands.reduce((sum,b)=>sum+(s[b]||0),0);
+    const s=monthSales[m]||{brands:{},codes:{}};
+    if(prods)return prods.reduce((sum,id)=>sum+(s.codes[id]||0),0);
+    if(cats){
+      const catCodes=Object.keys(masterCategory).filter(id=>cats.includes(masterCategory[id])&&(!brands||brands.includes(masterBrand[id])));
+      return catCodes.reduce((sum,id)=>sum+(s.codes[id]||0),0);
+    }
+    if(brands)return brands.reduce((sum,b)=>sum+(s.brands[b]||0),0);
+    return Object.values(s.brands).reduce((a,b)=>a+b,0);
   });
   const latest=data[data.length-1]||0;
   document.getElementById('m-latest').textContent=latest.toLocaleString();
@@ -432,7 +525,11 @@ function renderSales(){
 let invChart=null;
 function renderInventory(){
   const brands=getActiveBrands();
-  let items=brands?invItems.filter(x=>brands.includes(x.brand)):[...invItems];
+  const prods=getActiveProducts();
+  const cats=getActiveCats();
+  let items=prods?invItems.filter(x=>prods.includes(x.code)):
+            cats?invItems.filter(x=>cats.includes(masterCategory[x.code])&&(!brands||brands.includes(x.brand))):
+            brands?invItems.filter(x=>brands.includes(x.brand)):[...invItems];
   items=items.filter(x=>x.qty>0).sort((a,b)=>b.qty-a.qty);
   document.getElementById('m-inv').textContent=items.reduce((a,x)=>a+x.qty,0).toLocaleString();
   document.getElementById('m-skus').textContent=items.length.toLocaleString();
