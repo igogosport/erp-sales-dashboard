@@ -164,13 +164,22 @@ tbody tr:hover td{background:var(--surface2)}
     </div>
   </div>
 
-  <div class="card" id="inv-card" style="display:none">
-    <div class="card-title" id="inv-title">庫存明細</div>
-    <div class="tbl-wrap">
-      <table>
-        <thead><tr><th>品項編碼</th><th>品項名稱</th><th>品牌</th><th style="text-align:right">庫存數量</th><th>狀態</th></tr></thead>
-        <tbody id="inv-tbody"></tbody>
-      </table>
+  <div id="brand-rank-section" style="display:none">
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-title" style="display:flex;align-items:center;justify-content:space-between">
+          <span>品牌銷售排名</span>
+          <div style="display:flex;gap:4px">
+            <span class="tag active" id="brank-top10" onclick="setBrandLimit(10)" style="font-size:11px;padding:2px 9px">前 10</span>
+            <span class="tag" id="brank-all" onclick="setBrandLimit(0)" style="font-size:11px;padding:2px 9px">全部</span>
+          </div>
+        </div>
+        <div class="chart-wrap tall" id="brand-rank-wrap"><canvas id="brandRankChart"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-title">品牌營收比例</div>
+        <div class="chart-wrap tall"><canvas id="brandPieChart"></canvas></div>
+      </div>
     </div>
   </div>
 
@@ -283,7 +292,7 @@ function parseSales(rows){
   const hdr=rows[0].map(h=>String(h).trim());
   const fi=(...kws)=>{for(const k of kws){const i=hdr.findIndex(h=>h.includes(k));if(i>=0)return i;}return -1;};
   const dateIdx=fi('日期轉換'),nameIdx=fi('品項名稱','商品名稱'),codeIdx=fi('品項編碼','商品ID');
-  const qtyIdx=hdr.findIndex(h=>h==='數量');
+  const qtyIdx=hdr.findIndex(h=>h==='數量'),revIdx=fi('合計');
   monthSales={};
   const mSet=new Set();
   rows.slice(1).forEach(r=>{
@@ -292,12 +301,17 @@ function parseSales(rows){
     const code=String(r[codeIdx]||'').trim();
     const name=String(r[nameIdx]||'').trim();
     const qty=parseFloat(String(r[qtyIdx]||'0').replace(/,/g,''))||0;
+    const rev=revIdx>=0?parseFloat(String(r[revIdx]||'0').replace(/,/g,''))||0:0;
     const brand=masterBrand[code]||(name.match(/【(.+?)】/)||[])[1]||'其他';
     const[y,mo]=date.split('/');const key=y+mo.padStart(2,'0');
     mSet.add(key);
-    if(!monthSales[key])monthSales[key]={brands:{},codes:{}};
+    if(!monthSales[key])monthSales[key]={brands:{},codes:{},brandRev:{},codeRev:{}};
     monthSales[key].brands[brand]=(monthSales[key].brands[brand]||0)+qty;
-    if(code)monthSales[key].codes[code]=(monthSales[key].codes[code]||0)+qty;
+    monthSales[key].brandRev[brand]=(monthSales[key].brandRev[brand]||0)+rev;
+    if(code){
+      monthSales[key].codes[code]=(monthSales[key].codes[code]||0)+qty;
+      monthSales[key].codeRev[code]=(monthSales[key].codeRev[code]||0)+rev;
+    }
   });
   allMonths=[...mSet].sort();
 }
@@ -495,10 +509,12 @@ function renderAll(){
   document.getElementById('filter-area').style.display='block';
   document.getElementById('metrics').style.display='grid';
   document.getElementById('charts-row').style.display='grid';
-  document.getElementById('inv-card').style.display='block';
+  const showBrandRank=selectedBrands.size===0;
+  document.getElementById('brand-rank-section').style.display=showBrandRank?'block':'none';
   renderSales();
   renderRanking();
-  renderInventory();
+  renderInventoryMetrics();
+  if(showBrandRank)renderBrandRanking();
 }
 
 let salesChart=null;
@@ -599,30 +615,77 @@ function renderRanking(){
   document.getElementById('rank-title').textContent=brandLabel+' 銷售排名';
 }
 
-function renderInventory(){
+function renderInventoryMetrics(){
   const brands=getActiveBrands();
   const prods=getActiveProducts();
   const cats=getActiveCats();
   let items=prods?invItems.filter(x=>prods.includes(x.code)):
             cats?invItems.filter(x=>cats.includes(masterCategory[x.code])&&(!brands||brands.includes(x.brand))):
             brands?invItems.filter(x=>brands.includes(x.brand)):[...invItems];
-  items=items.filter(x=>x.qty>0).sort((a,b)=>b.qty-a.qty);
+  items=items.filter(x=>x.qty>0);
   document.getElementById('m-inv').textContent=items.reduce((a,x)=>a+x.qty,0).toLocaleString();
   document.getElementById('m-skus').textContent=items.length.toLocaleString();
-  const brandLabel=brands?brands.join('、'):'全品牌';
-  document.getElementById('inv-title').textContent=brandLabel+' 庫存明細';
-  const tbody=document.getElementById('inv-tbody');
-  tbody.innerHTML='';
-  items.forEach(x=>{
-    const cls=x.qty>50?'badge-ok':x.qty>10?'badge-warn':'badge-err';
-    const tag=x.qty>50?'充足':x.qty>10?'警示':'低庫存';
-    tbody.insertAdjacentHTML('beforeend',`<tr>
-      <td style="font-family:monospace;color:var(--text3);font-size:10px">${x.code}</td>
-      <td>${x.name}</td>
-      <td style="color:var(--text2)">${x.brand}</td>
-      <td style="text-align:right;font-weight:500">${x.qty.toLocaleString()}</td>
-      <td><span class="badge ${cls}">${tag}</span></td>
-    </tr>`);
+}
+
+const PIE_COLORS=['#378ADD','#1D9E75','#BA7517','#d85a30','#7c5cbf','#2ab7ca',
+  '#e8a838','#4caf82','#e05c94','#6b8e23','#c0392b','#1a7abf'];
+
+let brandLimit=10;
+function setBrandLimit(n){
+  brandLimit=n;
+  document.getElementById('brank-top10').className='tag'+(n===10?' active':'');
+  document.getElementById('brank-all').className='tag'+(n===0?' active':'');
+  renderBrandRanking();
+}
+
+let brandRankChart=null,brandPieChart=null;
+function renderBrandRanking(){
+  const activeMo=getActiveMonths();
+  const months=activeMo||allMonths.slice().sort();
+
+  // aggregate revenue per brand across selected months
+  const revTotals={};
+  months.forEach(m=>{
+    const br=(monthSales[m]||{}).brandRev||{};
+    Object.entries(br).forEach(([b,v])=>{ revTotals[b]=(revTotals[b]||0)+v; });
+  });
+
+  let entries=Object.entries(revTotals).filter(([,v])=>v>0).sort((a,b)=>b[1]-a[1]);
+  const show=brandLimit>0?entries.slice(0,brandLimit):entries;
+
+  // bar chart
+  const barH=Math.max(300,show.length*28);
+  document.getElementById('brand-rank-wrap').style.height=barH+'px';
+  const barLabels=show.map(([b])=>b);
+  const barData=show.map(([,v])=>Math.round(v/10000));
+  const mx=Math.max(...barData,1);
+  const barColors=barData.map(v=>v/mx>0.6?'#378ADDcc':v/mx>0.3?'#378ADD88':'#378ADD44');
+
+  if(brandRankChart)brandRankChart.destroy();
+  brandRankChart=new Chart(document.getElementById('brandRankChart'),{
+    type:'bar',
+    data:{labels:barLabels,datasets:[{data:barData,backgroundColor:barColors,borderWidth:0,borderRadius:3}]},
+    options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>` ${ctx.parsed.x.toLocaleString()} 萬`}}},
+      scales:{x:{position:'top',beginAtZero:true,ticks:{font:{size:9},callback:v=>v+'萬'}},y:{ticks:{font:{size:10}}}}}
+  });
+
+  // pie chart — top 10 only for readability
+  const pieEntries=entries.slice(0,10);
+  const pieLabels=pieEntries.map(([b])=>b);
+  const pieData=pieEntries.map(([,v])=>v);
+  const total=pieData.reduce((a,b)=>a+b,0);
+
+  if(brandPieChart)brandPieChart.destroy();
+  brandPieChart=new Chart(document.getElementById('brandPieChart'),{
+    type:'pie',
+    data:{labels:pieLabels,datasets:[{data:pieData,backgroundColor:PIE_COLORS.slice(0,pieLabels.length),borderWidth:1,borderColor:'transparent'}]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{position:'right',labels:{font:{size:11},boxWidth:12}},
+        tooltip:{callbacks:{label:ctx=>{
+          const pct=total?((ctx.parsed/total)*100).toFixed(1):'0';
+          return ` ${ctx.label}：${Math.round(ctx.parsed/10000).toLocaleString()}萬 (${pct}%)`;
+        }}}}}
   });
 }
 
