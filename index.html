@@ -252,11 +252,14 @@ async function loadAll(){
 }
 
 /* parse master brand table (計算表 B=ID, C=品牌, D=商品名稱, E=類別) */
+const BRAND_NORMALIZE={'Scosche':'SCOSCHE','MARLEY_OLD':'MARLEY','PHILIPS':'Philips'};
+function normBrand(b){return BRAND_NORMALIZE[b]||b;}
+
 function parseMaster(rows){
   masterBrand={};masterName={};masterCategory={};
   rows.slice(1).forEach(r=>{
     const id=String(r[0]||'').trim();
-    const brand=String(r[1]||'').trim();
+    const brand=normBrand(String(r[1]||'').trim());
     const name=String(r[2]||'').trim();
     const cat=String(r[3]||'').trim();
     if(!id)return;
