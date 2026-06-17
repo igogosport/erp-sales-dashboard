@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>庫存健康度</title>
+<title>庫存健康</title>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -97,10 +97,14 @@ tbody tr:hover td{background:var(--surface2)}
 .badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:500}
 .badge-ok{background:rgba(29,158,117,.12);color:var(--green)}
 .badge-warn{background:rgba(186,117,23,.1);color:var(--amber)}
+.badge-high{background:rgba(210,105,30,.15);color:#c05a00}
+.badge-veryhigh{background:rgba(140,60,180,.13);color:#7b2fbe}
 .badge-err{background:rgba(216,90,48,.1);color:var(--red)}
 .badge-eol{background:rgba(0,0,0,.1);color:var(--text2)}
 .badge-zero{background:rgba(0,0,0,.05);color:var(--text3)}
 @media(prefers-color-scheme:dark){
+  .badge-high{background:rgba(210,105,30,.2);color:#e07820}
+  .badge-veryhigh{background:rgba(140,60,180,.2);color:#b060f0}
   .badge-eol{background:rgba(255,255,255,.1);color:var(--text2)}
   .badge-zero{background:rgba(255,255,255,.05);color:var(--text3)}
 }
@@ -118,7 +122,7 @@ tbody tr:hover td{background:var(--surface2)}
     <div class="nav-links">
       <a href="index.html" class="nav-link">銷售</a>
       <a href="profit.html" class="nav-link">毛利分析</a>
-      <a href="inventory.html" class="nav-link active">庫存健康度</a>
+      <a href="inventory.html" class="nav-link active">庫存健康</a>
     </div>
     <div class="spacer"></div>
     <span class="dot" id="dot"></span>
@@ -140,6 +144,8 @@ tbody tr:hover td{background:var(--surface2)}
         <span class="tag all-tag active" data-status="all" onclick="setStatusFilter('all',this)">全部</span>
         <span class="tag" data-status="缺貨風險" onclick="setStatusFilter('缺貨風險',this)">🔴 缺貨風險</span>
         <span class="tag" data-status="庫存偏高" onclick="setStatusFilter('庫存偏高',this)">🟡 庫存偏高</span>
+        <span class="tag" data-status="庫存很高" onclick="setStatusFilter('庫存很高',this)">🟠 庫存很高</span>
+        <span class="tag" data-status="庫存超高" onclick="setStatusFilter('庫存超高',this)">🟣 庫存超高</span>
         <span class="tag" data-status="EOL待清" onclick="setStatusFilter('EOL待清',this)">⚫ EOL 待清</span>
         <span class="tag" data-status="正常" onclick="setStatusFilter('正常',this)">🟢 正常</span>
       </div>
@@ -164,17 +170,27 @@ tbody tr:hover td{background:var(--surface2)}
     <div class="metric red">
       <div class="metric-label">🔴 缺貨風險</div>
       <div class="metric-value" id="m-risk">—</div>
-      <div class="metric-sub">可售 &lt; 1.5 個月</div>
+      <div class="metric-sub">可售 &lt; 2 個月</div>
     </div>
     <div class="metric amber">
       <div class="metric-label">🟡 庫存偏高</div>
       <div class="metric-value" id="m-slow">—</div>
-      <div class="metric-sub">可售 &gt; 6 個月</div>
+      <div class="metric-sub">可售 6–12 個月</div>
+    </div>
+    <div class="metric" style="--val-color:#c05a00">
+      <div class="metric-label">🟠 庫存很高</div>
+      <div class="metric-value" id="m-high" style="color:#c05a00">—</div>
+      <div class="metric-sub">可售 12–24 個月</div>
+    </div>
+    <div class="metric" style="--val-color:#7b2fbe">
+      <div class="metric-label">🟣 庫存超高</div>
+      <div class="metric-value" id="m-veryhigh" style="color:#7b2fbe">—</div>
+      <div class="metric-sub">可售 &gt; 24 個月</div>
     </div>
     <div class="metric dark">
       <div class="metric-label">⚫ EOL 待清</div>
       <div class="metric-value" id="m-eol">—</div>
-      <div class="metric-sub">近 3 月無銷售</div>
+      <div class="metric-sub">計算表標記 EOL</div>
     </div>
   </div>
 
@@ -192,6 +208,20 @@ tbody tr:hover td{background:var(--surface2)}
         <span class="alert-count" id="slow-count">0</span>
       </div>
       <div class="alert-list" id="slow-list"></div>
+    </div>
+    <div class="alert-card" style="background:var(--surface);border:.5px solid var(--border);border-radius:var(--r-lg);padding:16px">
+      <div class="alert-header">
+        <span class="alert-title">🟠 庫存很高</span>
+        <span class="alert-count" id="high-count" style="background:rgba(210,105,30,.15);color:#c05a00">0</span>
+      </div>
+      <div class="alert-list" id="high-list"></div>
+    </div>
+    <div class="alert-card" style="background:var(--surface);border:.5px solid var(--border);border-radius:var(--r-lg);padding:16px">
+      <div class="alert-header">
+        <span class="alert-title">🟣 庫存超高</span>
+        <span class="alert-count" id="veryhigh-count" style="background:rgba(140,60,180,.13);color:#7b2fbe">0</span>
+      </div>
+      <div class="alert-list" id="veryhigh-list"></div>
     </div>
     <div class="alert-card alert-dark">
       <div class="alert-header">
@@ -321,13 +351,15 @@ async function apiGet(url){
 const BRAND_NORMALIZE={'Scosche':'SCOSCHE','MARLEY_OLD':'MARLEY','PHILIPS':'Philips'};
 function normBrand(b){return BRAND_NORMALIZE[b]||b;}
 
-/* Status classification — EOL determined by 計算表 A欄, not avg3 */
+/* Status classification — EOL determined by 計算表 A欄 */
 function classifyStatus(qty,avg3,months,reorder,isEOL){
   if(qty<=0)return '零庫存';
   if(isEOL)return 'EOL待清';
-  if(months<1.5)return '缺貨風險';
-  if(months>6)return '庫存偏高';
-  return '正常';
+  if(months<2)return '缺貨風險';
+  if(months<=6)return '正常';
+  if(months<=12)return '庫存偏高';
+  if(months<=24)return '庫存很高';
+  return '庫存超高';
 }
 
 async function loadAll(){
@@ -428,15 +460,13 @@ function renderKPIs(){
   document.getElementById('m-skus').textContent=withQty.length.toLocaleString();
   document.getElementById('m-risk').textContent=base.filter(x=>x.status==='缺貨風險').length.toLocaleString();
   document.getElementById('m-slow').textContent=base.filter(x=>x.status==='庫存偏高').length.toLocaleString();
+  document.getElementById('m-high').textContent=base.filter(x=>x.status==='庫存很高').length.toLocaleString();
+  document.getElementById('m-veryhigh').textContent=base.filter(x=>x.status==='庫存超高').length.toLocaleString();
   document.getElementById('m-eol').textContent=base.filter(x=>x.status==='EOL待清').length.toLocaleString();
   const totalVal=base.reduce((s,x)=>s+x.invValue,0);
   const el=document.getElementById('m-total-cost');
   if(el){
-    if(totalVal>0){
-      el.textContent=(totalVal>=10000?Math.round(totalVal/10000).toLocaleString()+'萬':totalVal.toLocaleString())+'元';
-    } else {
-      el.textContent='—';
-    }
+    el.textContent=totalVal>0?(totalVal>=10000?Math.round(totalVal/10000).toLocaleString()+'萬':totalVal.toLocaleString())+'元':'—';
   }
 }
 
@@ -444,10 +474,14 @@ function renderAlerts(){
   const base=allItems.filter(x=>selectedBrand?x.brand===selectedBrand:true);
   const risk=base.filter(x=>x.status==='缺貨風險').sort((a,b)=>a.months-b.months);
   const slow=base.filter(x=>x.status==='庫存偏高').sort((a,b)=>b.months-a.months);
+  const high=base.filter(x=>x.status==='庫存很高').sort((a,b)=>b.months-a.months);
+  const veryhigh=base.filter(x=>x.status==='庫存超高').sort((a,b)=>(b.months===999?99999:b.months)-(a.months===999?99999:a.months));
   const eol=base.filter(x=>x.status==='EOL待清').sort((a,b)=>b.qty-a.qty);
 
   document.getElementById('risk-count').textContent=risk.length+'件';
   document.getElementById('slow-count').textContent=slow.length+'件';
+  document.getElementById('high-count').textContent=high.length+'件';
+  document.getElementById('veryhigh-count').textContent=veryhigh.length+'件';
   document.getElementById('eol-count').textContent=eol.length+'件';
 
   function fillList(listId,items,metaFn){
@@ -461,8 +495,11 @@ function renderAlerts(){
     });
     if(items.length>15){const m=document.createElement('div');m.className='empty-note';m.textContent=`…還有 ${items.length-15} 件`;el.appendChild(m);}
   }
-  fillList('risk-list',risk,x=>`庫存${x.qty} 可售${x.months===999?'∞':x.months}月`);
-  fillList('slow-list',slow,x=>`可售${x.months===999?'∞':x.months}月`);
+  const moStr=x=>`可售${x.months===999?'∞':x.months}月`;
+  fillList('risk-list',risk,x=>`庫存${x.qty} ${moStr(x)}`);
+  fillList('slow-list',slow,x=>moStr(x));
+  fillList('high-list',high,x=>moStr(x));
+  fillList('veryhigh-list',veryhigh,x=>moStr(x));
   fillList('eol-list',eol,x=>`庫存${x.qty}`);
 }
 
@@ -500,8 +537,8 @@ function renderTable(){
   base.forEach(x=>{
     const tr=document.createElement('tr');
     const monthsStr=x.months===999?'∞':x.months===0?'—':x.months.toFixed(1);
-    const badgeCls=x.status==='缺貨風險'?'badge-err':x.status==='庫存偏高'?'badge-warn':x.status==='EOL待清'?'badge-eol':x.status==='零庫存'?'badge-zero':'badge-ok';
-    const statusIcon=x.status==='缺貨風險'?'🔴 ':x.status==='庫存偏高'?'🟡 ':x.status==='EOL待清'?'⚫ ':x.status==='零庫存'?'○ ':'🟢 ';
+    const badgeCls=x.status==='缺貨風險'?'badge-err':x.status==='庫存偏高'?'badge-warn':x.status==='庫存很高'?'badge-high':x.status==='庫存超高'?'badge-veryhigh':x.status==='EOL待清'?'badge-eol':x.status==='零庫存'?'badge-zero':'badge-ok';
+    const statusIcon=x.status==='缺貨風險'?'🔴 ':x.status==='庫存偏高'?'🟡 ':x.status==='庫存很高'?'🟠 ':x.status==='庫存超高'?'🟣 ':x.status==='EOL待清'?'⚫ ':x.status==='零庫存'?'○ ':'🟢 ';
     const costStr=x.cost>0?x.cost.toLocaleString():'—';
     const valStr=x.invValue>0?x.invValue.toLocaleString():'—';
     tr.innerHTML=`
