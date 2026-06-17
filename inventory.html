@@ -151,6 +151,11 @@ tbody tr:hover td{background:var(--surface2)}
 
   <div class="metrics" id="metrics" style="display:none">
     <div class="metric">
+      <div class="metric-label">庫存總金額</div>
+      <div class="metric-value" id="m-total-cost">—</div>
+      <div class="metric-sub" id="m-cost-sub">載入成本中…</div>
+    </div>
+    <div class="metric">
       <div class="metric-label">有庫存 SKU</div>
       <div class="metric-value" id="m-skus">—</div>
       <div class="metric-sub">個品項</div>
@@ -209,6 +214,8 @@ tbody tr:hover td{background:var(--surface2)}
             <th onclick="sortBy('name')">品名</th>
             <th onclick="sortBy('brand')">品牌</th>
             <th onclick="sortBy('qty')" class="num">庫存數量</th>
+            <th onclick="sortBy('cost')" class="num">成本</th>
+            <th onclick="sortBy('invValue')" class="num">庫存金額</th>
             <th onclick="sortBy('avg3')" class="num">近 3 月均銷</th>
             <th onclick="sortBy('months')" class="num">可售月份</th>
             <th onclick="sortBy('reorder')" class="num">再訂購點</th>
@@ -230,9 +237,52 @@ const TOKEN_URL='https://oauth2.googleapis.com/token';
 
 let saKey=null,accessToken=null,tokenExpiry=0;
 let allItems=[];
-let selectedBrand=null; // null = 全部
+let ecountCosts={}; // PROD_CD → IN_PRICE (Number)
+let selectedBrand=null;
 let statusFilter='all';
 let sortKey='status',sortDir=1;
+
+const ECOUNT_HOST='oapiib.ecount.com';
+const ECOUNT_COM='703642',ECOUNT_USER='ERIC',ECOUNT_KEY='07eb3d9d3cc684397a69ddce49879d8c57';
+const COST_CACHE_KEY='ecount_costs',COST_TS_KEY='ecount_costs_ts',COST_TTL=24*60*60*1000;
+
+async function loadEcountCosts(){
+  // Use localStorage cache if fresh
+  const ts=parseInt(localStorage.getItem(COST_TS_KEY)||'0');
+  if(Date.now()-ts<COST_TTL){
+    try{
+      const cached=JSON.parse(localStorage.getItem(COST_CACHE_KEY)||'{}');
+      if(Object.keys(cached).length>0){ecountCosts=cached;return true;}
+    }catch(e){}
+  }
+  try{
+    const loginRes=await fetch(`https://${ECOUNT_HOST}/OAPI/V2/OAPILogin`,{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({COM_CODE:ECOUNT_COM,USER_ID:ECOUNT_USER,API_CERT_KEY:ECOUNT_KEY,LAN_TYPE:'zh-TW',ZONE:'ib'})
+    });
+    const loginData=await loginRes.json();
+    const sid=loginData?.Data?.Datas?.SESSION_ID||loginData?.Data?.SESSION_ID;
+    if(!sid)return false;
+    const prodRes=await fetch(`https://${ECOUNT_HOST}/OAPI/V2/InventoryBasic/GetBasicProductsList?SESSION_ID=${sid}`,{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({FROM_PROD_CD:'A00000000',TO_PROD_CD:'Z99999999'})
+    });
+    const prodData=await prodRes.json();
+    const items=prodData?.Data?.Result||[];
+    const map={};
+    items.forEach(x=>{
+      const cost=parseFloat(x.IN_PRICE||0);
+      if(x.PROD_CD&&cost>0)map[x.PROD_CD]=cost;
+    });
+    ecountCosts=map;
+    localStorage.setItem(COST_CACHE_KEY,JSON.stringify(map));
+    localStorage.setItem(COST_TS_KEY,String(Date.now()));
+    return true;
+  }catch(e){
+    console.warn('ECOUNT cost fetch failed (CORS?):', e.message);
+    return false;
+  }
+}
 
 function setDot(s,t){document.getElementById('dot').className='dot '+s;document.getElementById('hdr-text').textContent=t}
 function showBanner(type,msg){
@@ -282,7 +332,11 @@ function classifyStatus(qty,avg3,months,reorder){
 async function loadAll(){
   setDot('spin','讀取中…');
   try{
-    const res=await apiGet(`https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent(MASTER_SHEET+'!A:S')}`);
+    // Load sheets + ECOUNT costs in parallel
+    const [res, costOk]=await Promise.all([
+      apiGet(`https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent(MASTER_SHEET+'!A:S')}`),
+      loadEcountCosts()
+    ]);
     parseMaster(res.values||[]);
     buildFilters();
     renderKPIs();
@@ -292,6 +346,9 @@ async function loadAll(){
     document.getElementById('metrics').style.display='grid';
     document.getElementById('alerts').style.display='grid';
     document.getElementById('tbl-card').style.display='block';
+    const costCount=Object.keys(ecountCosts).length;
+    const sub=document.getElementById('m-cost-sub');
+    if(sub)sub.textContent=costOk?`成本覆蓋 ${costCount} 筆`:'無法取得成本 (CORS)';
     setDot('ok',`已更新 ${new Date().toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit'})}`);
   }catch(e){
     setDot('err','讀取失敗');
@@ -315,8 +372,10 @@ function parseMaster(rows){
     const avg3=parseNum(r[18]);
     const months=avg3>0?parseFloat((qty/avg3).toFixed(1)):qty>0?999:0;
     const reorder=parseNum(r[12]);
+    const cost=ecountCosts[code]||0;
+    const invValue=cost>0?Math.round(qty*cost):0;
     const status=classifyStatus(qty,avg3,months,reorder);
-    allItems.push({code,brand,name,cat,qty,avg3,months,reorder,status});
+    allItems.push({code,brand,name,cat,qty,avg3,months,reorder,cost,invValue,status});
   });
 }
 
@@ -368,6 +427,15 @@ function renderKPIs(){
   document.getElementById('m-risk').textContent=base.filter(x=>x.status==='缺貨風險').length.toLocaleString();
   document.getElementById('m-slow').textContent=base.filter(x=>x.status==='庫存偏高').length.toLocaleString();
   document.getElementById('m-eol').textContent=base.filter(x=>x.status==='EOL待清').length.toLocaleString();
+  const totalVal=base.reduce((s,x)=>s+x.invValue,0);
+  const el=document.getElementById('m-total-cost');
+  if(el){
+    if(totalVal>0){
+      el.textContent=(totalVal>=10000?Math.round(totalVal/10000).toLocaleString()+'萬':totalVal.toLocaleString())+'元';
+    } else {
+      el.textContent='—';
+    }
+  }
 }
 
 function renderAlerts(){
@@ -432,11 +500,15 @@ function renderTable(){
     const monthsStr=x.months===999?'∞':x.months===0?'—':x.months.toFixed(1);
     const badgeCls=x.status==='缺貨風險'?'badge-err':x.status==='庫存偏高'?'badge-warn':x.status==='EOL待清'?'badge-eol':x.status==='零庫存'?'badge-zero':'badge-ok';
     const statusIcon=x.status==='缺貨風險'?'🔴 ':x.status==='庫存偏高'?'🟡 ':x.status==='EOL待清'?'⚫ ':x.status==='零庫存'?'○ ':'🟢 ';
+    const costStr=x.cost>0?x.cost.toLocaleString():'—';
+    const valStr=x.invValue>0?x.invValue.toLocaleString():'—';
     tr.innerHTML=`
       <td style="font-family:monospace;font-size:11px;color:var(--text3)">${x.code}</td>
       <td class="td-name" title="${x.name}">${x.name}</td>
       <td>${x.brand}</td>
       <td class="num">${x.qty.toLocaleString()}</td>
+      <td class="num">${costStr}</td>
+      <td class="num">${valStr}</td>
       <td class="num">${x.avg3>0?x.avg3.toFixed(1):'—'}</td>
       <td class="num">${monthsStr}</td>
       <td class="num">${x.reorder>0?x.reorder.toFixed(0):'—'}</td>
@@ -445,7 +517,7 @@ function renderTable(){
   });
 
   // update sort indicators
-  const keys=['code','name','brand','qty','avg3','months','reorder','status'];
+  const keys=['code','name','brand','qty','cost','invValue','avg3','months','reorder','status'];
   document.querySelectorAll('thead th').forEach((th,i)=>{
     th.classList.remove('sorted-asc','sorted-desc');
     if(keys[i]===_sortKey)th.classList.add(_sortDir===1?'sorted-asc':'sorted-desc');
