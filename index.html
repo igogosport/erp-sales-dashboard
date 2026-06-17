@@ -43,6 +43,8 @@ header{background:var(--surface);border-bottom:.5px solid var(--border);padding:
 .tag.all-tag{font-weight:500}
 .filter-divider{height:.5px;background:var(--border)}
 .btn{padding:5px 12px;font-size:12px;border:.5px solid var(--border2);border-radius:var(--r-md);background:var(--surface);color:var(--text);cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:5px;transition:all .1s}
+.collapse-btn{padding:0 4px;font-size:11px;border:.5px solid var(--border2);border-radius:4px;background:var(--surface2);color:var(--text3);cursor:pointer;line-height:16px;transition:transform .2s;font-family:inherit}
+.collapse-btn.collapsed{transform:rotate(-90deg)}
 .btn:hover{background:var(--surface2)}
 
 .page{max-width:1400px;margin:0 auto;padding:20px 24px;display:flex;flex-direction:column;gap:16px}
@@ -102,8 +104,8 @@ tbody tr:hover td{background:var(--surface2)}
       <span class="filter-label">品牌</span>
       <div class="tags" id="brand-tags"></div>
     </div>
-    <div id="cat-row" style="display:none"><div class="filter-divider"></div><div class="filter-row"><span class="filter-label">類別</span><div class="tags" id="cat-tags"></div></div></div>
-    <div id="prod-row" style="display:none"><div class="filter-divider"></div><div class="filter-row"><span class="filter-label">產品</span><div class="tags" id="prod-tags"></div></div></div>
+    <div id="cat-row" style="display:none"><div class="filter-divider"></div><div class="filter-row"><span class="filter-label" style="display:flex;align-items:center;gap:5px">類別<button class="collapse-btn" onclick="toggleCollapse('cat-tags-wrap')" title="折疊">▾</button></span><div id="cat-tags-wrap"><div class="tags" id="cat-tags"></div></div></div></div>
+    <div id="prod-row" style="display:none"><div class="filter-divider"></div><div class="filter-row"><span class="filter-label" style="display:flex;align-items:center;gap:5px">產品<button class="collapse-btn" onclick="toggleCollapse('prod-tags-wrap')" title="折疊">▾</button></span><div id="prod-tags-wrap"><div class="tags" id="prod-tags"></div></div></div></div>
     <div class="filter-divider"></div>
     <div id="month-rows"></div>
   </div>
@@ -568,6 +570,15 @@ function renderInventory(){
       <td><span class="badge ${cls}">${tag}</span></td>
     </tr>`);
   });
+}
+
+/* collapse toggle */
+function toggleCollapse(wrapId){
+  const wrap=document.getElementById(wrapId);
+  const btn=wrap.previousElementSibling.querySelector('.collapse-btn');
+  const collapsed=wrap.style.display==='none';
+  wrap.style.display=collapsed?'':'none';
+  btn.classList.toggle('collapsed',!collapsed);
 }
 
 /* init */
