@@ -355,8 +355,8 @@ function renderMonthTags(){
       renderMonthTags();renderSales();
     };
     tags.appendChild(allYrTag);
-    // individual months (newest first within year)
-    [...yearMonths].reverse().forEach(m=>{
+    // individual months: Jan → Dec
+    [...yearMonths].forEach(m=>{
       const t=document.createElement('span');
       t.className='tag'+(selectedMonths.has(m)?' active':'');
       t.textContent=m;
@@ -419,12 +419,10 @@ function renderSales(){
   document.getElementById('m-total').textContent=data.slice(-12).reduce((a,b)=>a+b,0).toLocaleString();
   const brandLabel=brands?brands.join('、'):'全品牌';
   document.getElementById('sales-title').textContent=brandLabel+' 每月銷售量';
-  const mx=Math.max(...data,1);
-  const colors=data.map(v=>v/mx>0.6?'#378ADDcc':v/mx>0.3?'#378ADD88':'#378ADD44');
   if(salesChart)salesChart.destroy();
   salesChart=new Chart(document.getElementById('salesChart'),{
-    type:'bar',
-    data:{labels:months,datasets:[{data,backgroundColor:colors,borderWidth:0,borderRadius:3}]},
+    type:'line',
+    data:{labels:months,datasets:[{data,borderColor:'#378ADD',backgroundColor:'#378ADD22',borderWidth:2,pointRadius:3,pointBackgroundColor:'#378ADD',fill:true,tension:0.3}]},
     options:{responsive:true,maintainAspectRatio:false,
       plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>` ${ctx.parsed.y.toLocaleString()} 件`}}},
       scales:{x:{ticks:{font:{size:10},maxRotation:45,maxTicksLimit:18}},y:{beginAtZero:true,ticks:{font:{size:10}}}}}
