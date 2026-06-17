@@ -153,8 +153,14 @@ tbody tr:hover td{background:var(--surface2)}
       <div class="chart-wrap"><canvas id="salesChart"></canvas></div>
     </div>
     <div class="card">
-      <div class="card-title">庫存排行（前 20）</div>
-      <div class="chart-wrap tall"><canvas id="invChart"></canvas></div>
+      <div class="card-title" style="display:flex;align-items:center;justify-content:space-between">
+        <span id="rank-title">銷售排名</span>
+        <div style="display:flex;gap:4px">
+          <span class="tag active" id="rank-top20" onclick="setRankLimit(20)" style="font-size:11px;padding:2px 9px">前 20</span>
+          <span class="tag" id="rank-all" onclick="setRankLimit(0)" style="font-size:11px;padding:2px 9px">全部</span>
+        </div>
+      </div>
+      <div class="chart-wrap tall" id="rank-chart-wrap"><canvas id="rankChart"></canvas></div>
     </div>
   </div>
 
@@ -491,6 +497,7 @@ function renderAll(){
   document.getElementById('charts-row').style.display='grid';
   document.getElementById('inv-card').style.display='block';
   renderSales();
+  renderRanking();
   renderInventory();
 }
 
@@ -527,7 +534,71 @@ function renderSales(){
   });
 }
 
-let invChart=null;
+let rankLimit=20;
+function setRankLimit(n){
+  rankLimit=n;
+  document.getElementById('rank-top20').className='tag'+(n===20?' active':'');
+  document.getElementById('rank-all').className='tag'+(n===0?' active':'');
+  renderRanking();
+}
+
+let rankChart=null;
+function renderRanking(){
+  const brands=getActiveBrands();
+  const prods=getActiveProducts();
+  const cats=getActiveCats();
+  const activeMo=getActiveMonths();
+  const months=activeMo||allMonths.slice().sort();
+
+  // aggregate sales per product code across selected months
+  const totals={};
+  months.forEach(m=>{
+    const codes=(monthSales[m]||{}).codes||{};
+    Object.entries(codes).forEach(([code,qty])=>{
+      totals[code]=(totals[code]||0)+qty;
+    });
+  });
+
+  // filter by active brand/cat/prod
+  let entries=Object.entries(totals).filter(([code])=>{
+    if(prods)return prods.includes(code);
+    if(cats&&brands)return cats.includes(masterCategory[code])&&brands.includes(masterBrand[code]);
+    if(cats)return cats.includes(masterCategory[code]);
+    if(brands)return brands.includes(masterBrand[code]);
+    return true;
+  });
+
+  entries.sort((a,b)=>b[1]-a[1]);
+  const show=rankLimit>0?entries.slice(0,rankLimit):entries;
+
+  // dynamic chart height: min 300px, 22px per item
+  const chartH=Math.max(300,show.length*22);
+  document.getElementById('rank-chart-wrap').style.height=chartH+'px';
+
+  const labels=show.map(([code])=>{
+    const n=masterName[code]||code;
+    return n.length>28?n.slice(0,28)+'…':n;
+  });
+  const data=show.map(([,qty])=>qty);
+  const mx=Math.max(...data,1);
+  const colors=data.map(v=>v/mx>0.6?'#378ADDcc':v/mx>0.3?'#378ADD88':'#378ADD44');
+
+  if(rankChart)rankChart.destroy();
+  rankChart=new Chart(document.getElementById('rankChart'),{
+    type:'bar',
+    data:{labels,datasets:[{data,backgroundColor:colors,borderWidth:0,borderRadius:3}]},
+    options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false},tooltip:{callbacks:{
+        title:ctx=>masterName[show[ctx[0].dataIndex][0]]||show[ctx[0].dataIndex][0],
+        label:ctx=>` 銷量：${ctx.parsed.x.toLocaleString()} 件`
+      }}},
+      scales:{x:{beginAtZero:true,ticks:{font:{size:9}}},y:{ticks:{font:{size:9}}}}}
+  });
+
+  const brandLabel=brands?brands.join('、'):'全品牌';
+  document.getElementById('rank-title').textContent=brandLabel+' 銷售排名';
+}
+
 function renderInventory(){
   const brands=getActiveBrands();
   const prods=getActiveProducts();
@@ -540,23 +611,6 @@ function renderInventory(){
   document.getElementById('m-skus').textContent=items.length.toLocaleString();
   const brandLabel=brands?brands.join('、'):'全品牌';
   document.getElementById('inv-title').textContent=brandLabel+' 庫存明細';
-
-  const top=items.slice(0,20);
-  const mx=Math.max(...top.map(x=>x.qty),1);
-  const colors=top.map(x=>x.qty/mx>0.6?'#1D9E75cc':x.qty/mx>0.3?'#BA7517cc':'#88877888');
-  if(invChart)invChart.destroy();
-  invChart=new Chart(document.getElementById('invChart'),{
-    type:'bar',
-    data:{labels:top.map(x=>x.name.length>22?x.name.slice(0,22)+'…':x.name),
-          datasets:[{data:top.map(x=>x.qty),backgroundColor:colors,borderWidth:0,borderRadius:3}]},
-    options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,
-      plugins:{legend:{display:false},tooltip:{callbacks:{
-        title:ctx=>top[ctx[0].dataIndex].name,
-        label:ctx=>` 庫存：${ctx.parsed.x.toLocaleString()} 件`
-      }}},
-      scales:{x:{beginAtZero:true,ticks:{font:{size:9}}},y:{ticks:{font:{size:9}}}}}
-  });
-
   const tbody=document.getElementById('inv-tbody');
   tbody.innerHTML='';
   items.forEach(x=>{
