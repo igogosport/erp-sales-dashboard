@@ -667,7 +667,8 @@ function renderBrandRanking(){
     type:'bar',
     data:{labels:barLabels,datasets:[{data:barData,backgroundColor:barColors,borderWidth:0,borderRadius:3}]},
     options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,
-      plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>` ${ctx.parsed.x.toLocaleString()} 萬`}}},
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>` ${ctx.parsed.x.toLocaleString()} 萬`}},
+        datalabels:{anchor:'end',align:'end',color:'var(--text2)',font:{size:10},formatter:v=>v.toLocaleString()+'萬'}},
       scales:{x:{position:'top',beginAtZero:true,ticks:{font:{size:9},callback:v=>v+'萬'}},y:{ticks:{font:{size:10}}}}}
   });
 
