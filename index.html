@@ -104,8 +104,8 @@ tbody tr:hover td{background:var(--surface2)}
     </div>
     <div class="filter-divider"></div>
     <div class="filter-row">
-      <span class="filter-label">年份</span>
-      <div class="tags" id="year-tags"></div>
+      <span class="filter-label">月份</span>
+      <div class="tags" id="month-tags"></div>
     </div>
   </div>
 </div>
@@ -182,7 +182,7 @@ let monthSales={},allMonths=[],masterBrand={},invItems=[];
 
 // selected filters: empty Set = all selected
 let selectedBrands=new Set();
-let selectedYears=new Set();
+let selectedMonths=new Set();
 
 /* status */
 function setDot(s,t){document.getElementById('dot').className='dot '+s;document.getElementById('hdr-text').textContent=t}
@@ -277,11 +277,13 @@ function parseSales(rows){
     const qty=parseFloat(String(r[qtyIdx]||'0').replace(/,/g,''))||0;
     // brand lookup: master table first, then 【Brand】 pattern
     const brand=masterBrand[code]||(name.match(/【(.+?)】/)||[])[1]||'其他';
-    mSet.add(date);
-    if(!monthSales[date])monthSales[date]={};
-    monthSales[date][brand]=(monthSales[date][brand]||0)+qty;
+    const[y,mo]=date.split('/');const key=y+mo.padStart(2,'0');
+    mSet.add(key);
+    if(!monthSales[key])monthSales[key]={};
+    monthSales[key][brand]=(monthSales[key][brand]||0)+qty;
   });
-  allMonths=[...mSet].sort();
+  // store as YYYYMM e.g. 202501
+  allMonths=[...mSet].sort().map(m=>{const[y,mo]=m.split('/');return y+mo.padStart(2,'0');});
 }
 
 /* parse inventory */
@@ -326,21 +328,21 @@ function renderTagGroup(containerId, items, selectedSet, onToggle){
 
 /* build filters */
 function buildFilters(){
-  const years=[...new Set(allMonths.map(m=>m.split('/')[0]))].sort().reverse();
+  const months=[...allMonths].reverse(); // newest first
   const brands=[...new Set(Object.values(masterBrand))].filter(Boolean).sort();
 
-  // reset to "全部" on first load
   selectedBrands=new Set();
-  selectedYears=new Set();
-  if(years.length)selectedYears.add(years[0]); // default: latest year
+  selectedMonths=new Set();
+  // default: latest 12 months
+  months.slice(0,12).forEach(m=>selectedMonths.add(m));
 
   renderTagGroup('brand-tags',brands,selectedBrands,renderAll);
-  renderTagGroup('year-tags',years,selectedYears,renderSales);
+  renderTagGroup('month-tags',months,selectedMonths,renderSales);
 }
 
-/* get active brands/years */
+/* get active filters */
 function getActiveBrands(){return selectedBrands.size?[...selectedBrands]:null;}
-function getActiveYears(){return selectedYears.size?[...selectedYears]:null;}
+function getActiveMonths(){return selectedMonths.size?[...selectedMonths].sort():null;}
 
 /* render */
 function renderAll(){
@@ -355,8 +357,8 @@ function renderAll(){
 let salesChart=null;
 function renderSales(){
   const brands=getActiveBrands();
-  const years=getActiveYears();
-  const months=allMonths.filter(m=>!years||years.some(y=>m.startsWith(y)));
+  const activeMo=getActiveMonths();
+  const months=activeMo||allMonths.slice().sort();
   const data=months.map(m=>{
     const s=monthSales[m]||{};
     if(!brands)return Object.values(s).reduce((a,b)=>a+b,0);
