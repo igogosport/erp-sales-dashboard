@@ -53,7 +53,9 @@ header{background:var(--surface);border-bottom:.5px solid var(--border);padding:
 .banner.err{background:rgba(216,90,48,.1);color:var(--red)}
 .banner.warn{background:rgba(186,117,23,.1);color:var(--amber)}
 
-.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}
+.metrics{display:flex;flex-direction:column;gap:8px}
+.metrics-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}
+.metrics-row-label{font-size:10px;color:var(--text3);font-weight:500;padding:2px 0 0 2px}
 .metric{background:var(--surface);border:.5px solid var(--border);border-radius:var(--r-lg);padding:16px 18px}
 .metric-label{font-size:10px;color:var(--text3);margin-bottom:6px}
 .metric-value{font-size:22px;font-weight:500;line-height:1;word-break:break-all}
@@ -140,25 +142,39 @@ tbody tr:hover td{background:var(--surface2)}
 
   <!-- KPI -->
   <div class="metrics" id="metrics" style="display:none">
-    <div class="metric green">
-      <div class="metric-label">本月營收金額</div>
-      <div class="metric-value" id="k-rev-month">—</div>
-      <div class="metric-sub" id="k-rev-month-lbl">—</div>
+    <div class="metrics-row">
+      <div class="metric green">
+        <div class="metric-label">本月營收</div>
+        <div class="metric-value" id="k-rev-month">—</div>
+        <div class="metric-sub" id="k-rev-month-lbl">—</div>
+      </div>
+      <div class="metric blue">
+        <div class="metric-label">本月毛利</div>
+        <div class="metric-value" id="k-profit-month">—</div>
+        <div class="metric-sub" id="k-profit-month-lbl">—</div>
+      </div>
+      <div class="metric amber">
+        <div class="metric-label">本月毛利率</div>
+        <div class="metric-value" id="k-margin-month">—</div>
+        <div class="metric-sub">毛利/營收</div>
+      </div>
     </div>
-    <div class="metric">
-      <div class="metric-label">選期營收合計</div>
-      <div class="metric-value" id="k-rev-total">—</div>
-      <div class="metric-sub" id="k-rev-total-lbl">—</div>
-    </div>
-    <div class="metric blue">
-      <div class="metric-label">本月毛利</div>
-      <div class="metric-value" id="k-profit-month">—</div>
-      <div class="metric-sub" id="k-profit-month-lbl">—</div>
-    </div>
-    <div class="metric amber">
-      <div class="metric-label">本月毛利率</div>
-      <div class="metric-value" id="k-margin-month">—</div>
-      <div class="metric-sub" id="k-margin-month-sub">毛利/營收</div>
+    <div class="metrics-row">
+      <div class="metric">
+        <div class="metric-label">選期營收合計</div>
+        <div class="metric-value" id="k-rev-total">—</div>
+        <div class="metric-sub" id="k-rev-total-lbl">—</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">選期毛利合計</div>
+        <div class="metric-value" id="k-profit-total">—</div>
+        <div class="metric-sub" id="k-profit-total-lbl">—</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">選期平均毛利率</div>
+        <div class="metric-value" id="k-margin-total">—</div>
+        <div class="metric-sub" id="k-margin-total-lbl">—</div>
+      </div>
     </div>
   </div>
 
@@ -483,7 +499,15 @@ function renderMonthTags(){
       renderMonthTags();renderAll();};tags.appendChild(ayt);
     yearMonths.forEach(m=>{
       const t=document.createElement('span');t.className='tag'+(selectedMonths.has(m)?' active':'');t.textContent=m;
-      t.onclick=()=>{if(selectedMonths.has(m))selectedMonths.delete(m);else selectedMonths.add(m);renderMonthTags();renderAll();};
+      t.onclick=(e)=>{
+        if(e.ctrlKey||e.metaKey){
+          if(selectedMonths.has(m))selectedMonths.delete(m);else selectedMonths.add(m);
+        } else {
+          if(selectedMonths.size===1&&selectedMonths.has(m))selectedMonths.clear();
+          else{selectedMonths.clear();selectedMonths.add(m);}
+        }
+        renderMonthTags();renderAll();
+      };
       tags.appendChild(t);});
     row.appendChild(tags);container.appendChild(row);
     if(y!==years[years.length-1]){const div=document.createElement('div');div.className='filter-divider';container.appendChild(div);}
@@ -562,13 +586,22 @@ function renderKPIs(){
   const agg=getMonthlyAgg();
   const latestMonth=agg[agg.length-1]||{rev:0,cost:0,profit:0,margin:null};
   const latestKey=getActiveMonths().slice(-1)[0]||'';
+  const totalRev=agg.reduce((s,x)=>s+x.rev,0);
+  const totalProfit=agg.reduce((s,x)=>s+x.profit,0);
+  const totalMargin=totalRev>0?totalProfit/totalRev:null;
+  // 本月列
   document.getElementById('k-rev-month').textContent=fmtNTD(latestMonth.rev);
   document.getElementById('k-rev-month-lbl').textContent=latestKey;
-  document.getElementById('k-rev-total').textContent=fmtNTD(agg.reduce((s,x)=>s+x.rev,0));
-  document.getElementById('k-rev-total-lbl').textContent=`${agg.length} 個月合計`;
   document.getElementById('k-profit-month').textContent=costLoaded?fmtNTD(latestMonth.profit):'—';
   document.getElementById('k-profit-month-lbl').textContent=latestKey;
   document.getElementById('k-margin-month').textContent=costLoaded?fmtPct(latestMonth.margin):'—';
+  // 選期列
+  document.getElementById('k-rev-total').textContent=fmtNTD(totalRev);
+  document.getElementById('k-rev-total-lbl').textContent=`${agg.length} 個月合計`;
+  document.getElementById('k-profit-total').textContent=costLoaded?fmtNTD(totalProfit):'—';
+  document.getElementById('k-profit-total-lbl').textContent=`${agg.length} 個月合計`;
+  document.getElementById('k-margin-total').textContent=costLoaded?fmtPct(totalMargin):'—';
+  document.getElementById('k-margin-total-lbl').textContent=`${agg.length} 個月平均`;
 }
 
 /* ── Trend charts ── */
