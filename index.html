@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>銷售月趨勢分析</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.44.0/tabler-icons.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#f5f5f3;--surface:#fff;--surface2:#f1efe8;--surface3:#e8e6df;
+  --border:rgba(0,0,0,.1);--border2:rgba(0,0,0,.18);
+  --text:#1a1a18;--text2:#5f5e5a;--text3:#88877f;
+  --accent:#378ADD;--accent2:#2a73c5;
+  --green:#1d9e75;--red:#d85a30;--amber:#ba7517;
+  --r-md:8px;--r-lg:12px;
+}
+@media(prefers-color-scheme:dark){
+  :root{
+    --bg:#1a1a18;--surface:#242422;--surface2:#2c2c2a;--surface3:#363634;
+    --border:rgba(255,255,255,.09);--border2:rgba(255,255,255,.18);
+    --text:#f0ede8;--text2:#b4b2a9;--text3:#888780;
+  }
+}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;font-size:14px}
+
+header{background:var(--surface);border-bottom:.5px solid var(--border);padding:0 20px;position:sticky;top:0;z-index:200}
+.hdr{max-width:1400px;margin:0 auto;display:flex;align-items:center;gap:16px;height:52px}
+.logo{font-size:15px;font-weight:500;display:flex;align-items:center;gap:8px;flex:1}
+.logo i{font-size:18px;color:var(--accent)}
+.hdr-status{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text2)}
+.dot{width:7px;height:7px;border-radius:50%;background:#ccc;flex-shrink:0;transition:background .3s}
+.dot.ok{background:var(--green)}
+.dot.err{background:var(--red)}
+.dot.spin{background:var(--amber);animation:pulse 1s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+
+.layout{max-width:1400px;margin:0 auto;display:grid;grid-template-columns:290px 1fr;min-height:calc(100vh - 52px)}
+
+aside{background:var(--surface);border-right:.5px solid var(--border);padding:18px 14px;display:flex;flex-direction:column;gap:18px;overflow-y:auto;height:calc(100vh - 52px);position:sticky;top:52px}
+.ctrl-label{font-size:10px;font-weight:500;color:var(--text3);letter-spacing:.06em;text-transform:uppercase;margin-bottom:7px}
+select{width:100%;padding:8px 10px;font-size:13px;font-family:inherit;background:var(--surface2);color:var(--text);border:.5px solid var(--border2);border-radius:var(--r-md);cursor:pointer;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center;padding-right:28px}
+select:focus{outline:none;border-color:var(--accent)}
+.product-list{display:flex;flex-direction:column;gap:3px;max-height:calc(100vh - 440px);min-height:60px;overflow-y:auto}
+.product-list::-webkit-scrollbar{width:3px}
+.product-list::-webkit-scrollbar-thumb{background:var(--surface3);border-radius:2px}
+.product-item{display:flex;align-items:flex-start;gap:7px;padding:6px 8px;border-radius:var(--r-md);cursor:pointer;border:.5px solid transparent;user-select:none}
+.product-item:hover{background:var(--surface2)}
+.product-item.checked{background:var(--surface2);border-color:var(--border)}
+.product-item input[type=checkbox]{width:13px;height:13px;cursor:pointer;accent-color:var(--accent);flex-shrink:0;margin-top:2px}
+.product-name{font-size:12px;color:var(--text2);line-height:1.35}
+.color-swatch{width:7px;height:7px;border-radius:1px;flex-shrink:0;margin-top:4px}
+.sel-actions{display:flex;gap:5px;margin-bottom:7px}
+.mini-btn{padding:3px 10px;font-size:11px;border:.5px solid var(--border2);border-radius:6px;background:transparent;color:var(--text2);cursor:pointer;font-family:inherit}
+.mini-btn:hover{background:var(--surface2)}
+.month-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:3px}
+.month-chip{padding:5px 3px;font-size:11px;text-align:center;border:.5px solid var(--border);border-radius:6px;cursor:pointer;color:var(--text2);user-select:none;transition:all .1s}
+.month-chip.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+.month-chip:hover:not(.active){background:var(--surface2)}
+
+main{padding:20px;display:flex;flex-direction:column;gap:16px}
+
+/* Connection card */
+.conn-card{background:var(--surface);border:.5px solid var(--border);border-radius:var(--r-lg);padding:20px}
+.conn-header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.conn-title{font-size:14px;font-weight:500}
+.conn-sub{font-size:12px;color:var(--text2);margin-top:2px}
+.sa-chip{display:inline-flex;align-items:center;gap:6px;background:rgba(29,158,117,.1);color:var(--green);border:.5px solid rgba(29,158,117,.3);border-radius:20px;padding:4px 12px;font-size:12px;font-weight:500}
+.sa-chip i{font-size:14px}
+
+.key-area{margin-top:14px;padding-top:14px;border-top:.5px solid var(--border)}
+.key-label{font-size:12px;color:var(--text2);margin-bottom:6px;display:flex;align-items:center;gap:6px}
+textarea{width:100%;height:90px;padding:10px;font-size:11px;font-family:monospace;background:var(--surface2);color:var(--text);border:.5px solid var(--border2);border-radius:var(--r-md);resize:vertical}
+textarea:focus{outline:none;border-color:var(--accent)}
+.btn-row{display:flex;gap:8px;margin-top:8px;align-items:center;flex-wrap:wrap}
+.btn{padding:7px 14px;font-size:12px;border:.5px solid var(--border2);border-radius:var(--r-md);background:var(--surface);color:var(--text);cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:6px;transition:all .12s;white-space:nowrap}
+.btn:hover{background:var(--surface2)}
+.btn-primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+.btn-primary:hover{background:var(--accent2)}
+.btn-sm{padding:4px 10px;font-size:11px}
+.btn-danger{color:var(--red);border-color:rgba(216,90,48,.3)}
+.btn-danger:hover{background:rgba(216,90,48,.08)}
+
+.sheet-row{margin-top:12px;padding-top:12px;border-top:.5px solid var(--border);display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.sheet-row label{font-size:12px;color:var(--text2);white-space:nowrap}
+
+.banner{border-radius:var(--r-md);padding:9px 12px;font-size:12px;display:flex;align-items:flex-start;gap:7px;margin-top:10px;line-height:1.5}
+.banner.ok{background:rgba(29,158,117,.1);color:var(--green)}
+.banner.err{background:rgba(216,90,48,.1);color:var(--red)}
+.banner.warn{background:rgba(186,117,23,.1);color:var(--amber)}
+.banner.info{background:rgba(55,138,221,.1);color:#185fa5}
+.banner i{flex-shrink:0;margin-top:1px}
+
+/* Metrics */
+.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px}
+.metric{background:var(--surface);border:.5px solid var(--border);border-radius:var(--r-lg);padding:12px 14px}
+.metric-label{font-size:10px;color:var(--text3);margin-bottom:3px}
+.metric-value{font-size:20px;font-weight:500}
+.metric-sub{font-size:10px;color:var(--text3);margin-top:2px}
+
+/* Chart */
+.chart-card{background:var(--surface);border:.5px solid var(--border);border-radius:var(--r-lg);padding:20px}
+.chart-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px}
+.chart-title{font-size:13px;font-weight:500}
+.chart-wrap{position:relative;width:100%;height:340px}
+.legend{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.legend-item{display:flex;align-items:center;gap:4px;font-size:11px;color:var(--text2)}
+.legend-dot{width:10px;height:3px;border-radius:1px;flex-shrink:0}
+.empty{display:flex;flex-direction:column;align-items:center;justify-content:center;height:280px;color:var(--text3);gap:8px}
+.empty i{font-size:36px;opacity:.2}
+.empty p{font-size:13px}
+
+@media(max-width:900px){.layout{grid-template-columns:1fr}aside{position:static;height:auto;max-height:45vh}}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="hdr">
+    <div class="logo"><i class="ti ti-trending-up" aria-hidden="true"></i> 銷售月趨勢分析</div>
+    <div class="hdr-status">
+      <span class="dot" id="dot"></span>
+      <span id="hdr-text">未連線</span>
+      <button class="btn btn-sm btn-danger" id="clear-key-btn" style="display:none" onclick="clearKey()">
+        <i class="ti ti-logout" aria-hidden="true"></i> 清除金鑰
+      </button>
+    </div>
+  </div>
+</header>
+
+<div class="layout">
+  <aside>
+    <div>
+      <div class="ctrl-label">品牌</div>
+      <select id="brand-select" onchange="onBrandChange()">
+        <option value="">— 請先連線 —</option>
+      </select>
+    </div>
+    <div>
+      <div class="ctrl-label">品項 <span id="sel-count" style="color:var(--accent);font-weight:600"></span></div>
+      <div class="sel-actions">
+        <button class="mini-btn" onclick="selectAll()">全選</button>
+        <button class="mini-btn" onclick="clearSel()">清除</button>
+      </div>
+      <div class="product-list" id="product-list">
+        <div style="font-size:12px;color:var(--text3);padding:6px 0">請先連線</div>
+      </div>
+    </div>
+    <div>
+      <div class="ctrl-label">月份</div>
+      <div class="sel-actions">
+        <button class="mini-btn" onclick="selMonths('all')">全選</button>
+        <button class="mini-btn" onclick="selMonths(6)">近6月</button>
+        <button class="mini-btn" onclick="selMonths(12)">近12月</button>
+      </div>
+      <div class="month-grid" id="month-grid"></div>
+    </div>
+  </aside>
+
+  <main>
+    <!-- Connection card -->
+    <div class="conn-card" id="conn-card">
+      <div class="conn-header">
+        <div>
+          <div class="conn-title">Google Sheets 連線</div>
+          <div class="conn-sub">透過 Service Account 直接讀取私人試算表</div>
+        </div>
+        <div class="sa-chip" id="sa-chip" style="display:none">
+          <i class="ti ti-shield-check" aria-hidden="true"></i>
+          <span id="sa-email-label"></span>
+        </div>
+      </div>
+
+      <!-- Key input (hidden after setup) -->
+      <div class="key-area" id="key-area">
+        <div class="key-label">
+          <i class="ti ti-key" aria-hidden="true"></i>
+          貼上 Service Account 私鑰 JSON
+        </div>
+        <textarea id="key-input" placeholder='{"type":"service_account","project_id":"igogosport-erp","private_key_id":"...","private_key":"-----BEGIN PRIVATE KEY-----\n...","client_email":"igogosport-sheets@igogosport-erp.iam.gserviceaccount.com",...}'></textarea>
+        <div class="btn-row">
+          <button class="btn btn-primary" onclick="saveKey()"><i class="ti ti-plug" aria-hidden="true"></i> 連線並儲存</button>
+          <span style="font-size:11px;color:var(--text3)"><i class="ti ti-lock" aria-hidden="true"></i> 金鑰僅儲存於本機瀏覽器 localStorage，不會上傳任何伺服器</span>
+        </div>
+        <div class="banner info" style="margin-top:10px">
+          <i class="ti ti-info-circle" aria-hidden="true"></i>
+          <span>在 Google Cloud Console → IAM → 服務帳戶 → <strong>igogosport-sheets</strong> → 金鑰 → 新增鍵 → JSON → 下載後，將整個 JSON 內容貼到上方</span>
+        </div>
+      </div>
+
+      <!-- Sheet picker (after auth) -->
+      <div class="sheet-row" id="sheet-row" style="display:none">
+        <label>工作表：</label>
+        <select id="sheet-select" style="width:auto;min-width:200px;flex:1" onchange="fetchSheetData()">
+          <option value="">— 載入中 —</option>
+        </select>
+        <button class="btn btn-primary" onclick="fetchSheetData()"><i class="ti ti-refresh" aria-hidden="true"></i> 重新讀取</button>
+        <input type="text" id="spreadsheet-id-input"
+          value="1N87NXPJuRNXyuONZOJyIN5iyMdpgmykx_iTGWAZSgW0"
+          style="width:340px;padding:7px 10px;font-size:11px;font-family:monospace;background:var(--surface2);color:var(--text);border:.5px solid var(--border2);border-radius:var(--r-md)"
+          placeholder="Spreadsheet ID"
+          onchange="onSpreadsheetChange()">
+      </div>
+
+      <div id="banner" class="banner info" style="margin-top:10px">
+        <i class="ti ti-info-circle" aria-hidden="true"></i>
+        <span>請貼上 Service Account 私鑰 JSON 以連線</span>
+      </div>
+    </div>
+
+    <!-- Metrics -->
+    <div class="metrics">
+      <div class="metric"><div class="metric-label">選取品項</div><div class="metric-value" id="m-sku">—</div><div class="metric-sub">個 SKU</div></div>
+      <div class="metric"><div class="metric-label">期間合計</div><div class="metric-value" id="m-total">—</div><div class="metric-sub">件</div></div>
+      <div class="metric"><div class="metric-label">月均銷量</div><div class="metric-value" id="m-avg">—</div><div class="metric-sub">件/月</div></div>
+      <div class="metric"><div class="metric-label">最高單月</div><div class="metric-value" id="m-peak">—</div><div class="metric-sub" id="m-peak-sub">—</div></div>
+    </div>
+
+    <!-- Chart -->
+    <div class="chart-card">
+      <div class="chart-header">
+        <span class="chart-title" id="chart-title">月銷售折線圖</span>
+        <div style="display:flex;gap:6px">
+          <button class="btn" onclick="toggleType()" id="type-btn"><i class="ti ti-chart-bar" aria-hidden="true"></i> 切換長條</button>
+          <button class="btn" onclick="dlChart()"><i class="ti ti-download" aria-hidden="true"></i> 下載</button>
+        </div>
+      </div>
+      <div class="chart-wrap">
+        <canvas id="mainChart" role="img" aria-label="銷售月趨勢圖"></canvas>
+        <div class="empty" id="empty">
+          <i class="ti ti-chart-line" aria-hidden="true"></i>
+          <p id="empty-msg">請先連線並選擇品牌</p>
+        </div>
+      </div>
+      <div class="legend" id="legend"></div>
+    </div>
+  </main>
+</div>
+
+<script>
+/* ─────────── Constants ─────────── */
+const SPREADSHEET_ID_DEFAULT = '1N87NXPJuRNXyuONZOJyIN5iyMdpgmykx_iTGWAZSgW0';
+const SCOPE = 'https://www.googleapis.com/auth/spreadsheets.readonly';
+const TOKEN_URL = 'https://oauth2.googleapis.com/token';
+
+const COLORS = ['#378ADD','#D85A30','#7F77DD','#1D9E75','#D4537E','#BA7517','#639922',
+  '#0F6E56','#993C1D','#3C3489','#5DCAA5','#EF9F27','#97C459','#F09595','#AFA9EC'];
+const DASHES = [[],[6,3],[2,2],[8,3,2,3],[4,2],[10,3]];
+
+/* ─────────── State ─────────── */
+let saKey = null;        // parsed service account JSON
+let accessToken = null;
+let tokenExpiry = 0;
+let allData = {};
+let allMonths = [];
+let selectedBrand = '';
+let selectedProducts = new Set();
+let selectedMonths = new Set();
+let chartType = 'line';
+let mainChart = null;
+
+/* ─────────── UI helpers ─────────── */
+function setDot(state, text) {
+  document.getElementById('dot').className = 'dot ' + state;
+  document.getElementById('hdr-text').textContent = text;
+}
+function showBanner(type, html) {
+  const icons = {ok:'ti-circle-check',err:'ti-alert-circle',warn:'ti-alert-triangle',info:'ti-info-circle'};
+  const el = document.getElementById('banner');
+  el.className = 'banner ' + type;
+  el.innerHTML = `<i class="ti ${icons[type]}" aria-hidden="true"></i><span>${html}</span>`;
+}
+
+/* ─────────── Service Account JWT ─────────── */
+function b64url(data) {
+  const b64 = typeof data === 'string' ? btoa(data) : btoa(String.fromCharCode(...new Uint8Array(data)));
+  return b64.replace(/=/g,'').replace(/\+/g,'-').replace(/\//g,'_');
+}
+
+async function getAccessToken() {
+  if (accessToken && Date.now() < tokenExpiry - 30000) return accessToken;
+  const now = Math.floor(Date.now() / 1000);
+  const header  = b64url(JSON.stringify({ alg:'RS256', typ:'JWT' }));
+  const payload = b64url(JSON.stringify({
+    iss: saKey.client_email,
+    scope: SCOPE,
+    aud: TOKEN_URL,
+    iat: now,
+    exp: now + 3600,
+  }));
+  const sigInput = `${header}.${payload}`;
+
+  // Import private key
+  const pemBody = saKey.private_key
+    .replace(/-----BEGIN PRIVATE KEY-----/, '')
+    .replace(/-----END PRIVATE KEY-----/, '')
+    .replace(/\n/g, '');
+  const keyBytes = Uint8Array.from(atob(pemBody), c => c.charCodeAt(0));
+  const cryptoKey = await crypto.subtle.importKey(
+    'pkcs8', keyBytes,
+    { name:'RSASSA-PKCS1-v1_5', hash:'SHA-256' },
+    false, ['sign']
+  );
+
+  const sig = await crypto.subtle.sign('RSASSA-PKCS1-v1_5', cryptoKey, new TextEncoder().encode(sigInput));
+  const jwt = `${sigInput}.${b64url(sig)}`;
+
+  const res = await fetch(TOKEN_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=${jwt}`,
+  });
+  const data = await res.json();
+  if (!res.ok || !data.access_token) throw new Error(data.error_description || data.error || '取得 Token 失敗');
+  accessToken = data.access_token;
+  tokenExpiry = Date.now() + (data.expires_in || 3600) * 1000;
+  return accessToken;
+}
+
+async function apiGet(url) {
+  const token = await getAccessToken();
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` }});
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error?.message || `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+/* ─────────── Key management ─────────── */
+function saveKey() {
+  const raw = document.getElementById('key-input').value.trim();
+  if (!raw) { showBanner('err', '請先貼上 JSON 內容'); return; }
+  let parsed;
+  try { parsed = JSON.parse(raw); } catch { showBanner('err', 'JSON 格式錯誤，請確認複製完整'); return; }
+  if (parsed.type !== 'service_account') { showBanner('err', '這不是 Service Account 金鑰（type 應為 service_account）'); return; }
+  if (!parsed.private_key || !parsed.client_email) { showBanner('err', '缺少 private_key 或 client_email 欄位'); return; }
+  localStorage.setItem('sa_key', raw);
+  saKey = parsed;
+  onKeyLoaded();
+}
+
+function loadSavedKey() {
+  const raw = localStorage.getItem('sa_key');
+  if (!raw) return false;
+  try { saKey = JSON.parse(raw); return true; } catch { return false; }
+}
+
+function clearKey() {
+  localStorage.removeItem('sa_key');
+  saKey = null; accessToken = null;
+  document.getElementById('key-area').style.display = '';
+  document.getElementById('sheet-row').style.display = 'none';
+  document.getElementById('sa-chip').style.display = 'none';
+  document.getElementById('clear-key-btn').style.display = 'none';
+  document.getElementById('key-input').value = '';
+  showBanner('info','請重新貼上 Service Account 私鑰 JSON');
+  setDot('','未連線');
+  allData={}; allMonths=[]; initControls();
+}
+
+async function onKeyLoaded() {
+  document.getElementById('sa-chip').style.display = 'inline-flex';
+  document.getElementById('sa-email-label').textContent = saKey.client_email;
+  document.getElementById('key-area').style.display = 'none';
+  document.getElementById('clear-key-btn').style.display = '';
+  setDot('spin', '連線中…');
+  try {
+    await loadSheetList();
+  } catch(e) {
+    setDot('err', '連線失敗');
+    document.getElementById('key-area').style.display = '';
+    showBanner('err', '連線失敗：' + e.message);
+  }
+}
+
+/* ─────────── Sheet list ─────────── */
+function getSpreadsheetId() {
+  return document.getElementById('spreadsheet-id-input').value.trim() || SPREADSHEET_ID_DEFAULT;
+}
+
+async function loadSheetList() {
+  const sid = getSpreadsheetId();
+  const meta = await apiGet(`https://sheets.googleapis.com/v4/spreadsheets/${sid}?fields=sheets.properties`);
+  const sheets = meta.sheets || [];
+  const sel = document.getElementById('sheet-select');
+  sel.innerHTML = '';
+  sheets.forEach(s => {
+    const o = document.createElement('option');
+    o.value = s.properties.title;
+    o.textContent = s.properties.title;
+    sel.appendChild(o);
+  });
+  document.getElementById('sheet-row').style.display = 'flex';
+  showBanner('ok', `已連線！找到 ${sheets.length} 個工作表，請選擇要分析的工作表後自動載入`);
+  setDot('ok', `已連線 · ${saKey.client_email.split('@')[0]}`);
+  if (sheets.length) await fetchSheetData();
+}
+
+function onSpreadsheetChange() {
+  allData={}; allMonths=[]; initControls();
+  loadSheetList().catch(e => showBanner('err','切換試算表失敗：'+e.message));
+}
+
+/* ─────────── Fetch & parse ─────────── */
+async function fetchSheetData() {
+  const sheetName = document.getElementById('sheet-select').value;
+  if (!sheetName) return;
+  const sid = getSpreadsheetId();
+  setDot('spin', `讀取「${sheetName}」…`);
+  showBanner('info', `正在讀取「${sheetName}」…`);
+  try {
+    const res = await apiGet(`https://sheets.googleapis.com/v4/spreadsheets/${sid}/values/${encodeURIComponent(sheetName)}`);
+    const rows = res.values || [];
+    if (!rows.length) throw new Error('工作表無資料');
+    const result = processRows(rows);
+    allData = result.data; allMonths = result.months;
+    const skus = Object.values(allData).reduce((a,b)=>a+Object.keys(b).length,0);
+    setDot('ok', `已連線 · ${saKey.client_email.split('@')[0]}`);
+    showBanner('ok', `✓「${sheetName}」· ${rows.length-1} 筆交易 · ${skus} SKU · ${allMonths.length} 個月`);
+    initControls();
+  } catch(e) {
+    setDot('err', '讀取失敗');
+    showBanner('err', '讀取失敗：' + e.message);
+    console.error(e);
+  }
+}
+
+function processRows(rows) {
+  const header = rows[0].map(h => String(h).trim());
+  const fi = (...kws) => { for (const kw of kws) { const i = header.findIndex(h => h.includes(kw)); if (i>=0) return i; } return -1; };
+
+  const dateIdx  = fi('日期轉換');
+  const nameIdx  = fi('品項名稱', '商品名稱');
+  const codeIdx  = fi('品項編碼', '商品ID');
+  const qtyIdx   = header.findIndex(h => h === '數量');
+  const brandIdx = fi('品牌');   // 優先：直接品牌欄
+
+  if (dateIdx<0) throw new Error('找不到日期欄位（日期轉換），請確認選對工作表');
+  if (nameIdx<0) throw new Error('找不到品名欄位（品項名稱 / 商品名稱）');
+  if (qtyIdx<0)  throw new Error('找不到「數量」欄位');
+
+  const monthSet = new Set();
+  const data = {};
+
+  for (let i=1; i<rows.length; i++) {
+    const r = rows[i];
+    const date = String(r[dateIdx]||'').trim();
+    const name = String(r[nameIdx]||'').trim();
+    if (!date || !name || !/^\d{4}\/\d{1,2}$/.test(date)) continue;
+
+    const qty  = parseInt(String(r[qtyIdx]||'0').replace(/,/g,'')) || 0;
+    const code = codeIdx>=0 ? String(r[codeIdx]||'').trim() : '';
+
+    // 品牌：有專屬欄位優先，否則從【品牌】格式抓，再否則歸「其他」
+    let brand = '';
+    if (brandIdx>=0) {
+      brand = String(r[brandIdx]||'').trim();
+    }
+    if (!brand) {
+      brand = (name.match(/[【\[](.+?)[】\]]/)||[])[1] || '其他';
+    }
+
+    const key = code || name;
+    monthSet.add(date);
+    if (!data[brand]) data[brand] = {};
+    if (!data[brand][key]) data[brand][key] = { name, code, monthly: {} };
+    data[brand][key].monthly[date] = (data[brand][key].monthly[date]||0) + qty;
+  }
+
+  if (!monthSet.size) throw new Error('無有效資料行，請確認欄位格式');
+  return { data, months: [...monthSet].sort() };
+}
+
+/* ─────────── Controls ─────────── */
+function initControls() {
+  const brands = Object.keys(allData).sort();
+  const sel = document.getElementById('brand-select');
+  sel.innerHTML = brands.length
+    ? '<option value="">— 請選擇品牌 —</option>'
+    : '<option value="">— 請先連線 —</option>';
+  brands.forEach(b=>{const o=document.createElement('option');o.value=b;o.textContent=b;sel.appendChild(o);});
+  selectedMonths=new Set(allMonths); selectedProducts.clear(); selectedBrand=''; sel.value='';
+  renderMonthGrid(); renderProducts(); renderChart();
+}
+
+function onBrandChange() {
+  selectedBrand=document.getElementById('brand-select').value;
+  selectedProducts.clear(); renderProducts(); renderChart();
+}
+
+function renderProducts() {
+  const el=document.getElementById('product-list');
+  if (!selectedBrand||!allData[selectedBrand]) {
+    el.innerHTML='<div style="font-size:12px;color:var(--text3);padding:6px 0">請先選擇品牌</div>';
+    document.getElementById('sel-count').textContent=''; return;
+  }
+  const prods = Object.entries(allData[selectedBrand])
+    .sort((a,b)=>totals(b[1])-totals(a[1]));
+  el.innerHTML='';
+  prods.forEach(([key,p],i)=>{
+    const color=COLORS[i%COLORS.length];
+    const short=p.name.replace(/[【\[].+?[】\]]/g,'').trim();
+    const div=document.createElement('label');
+    div.className='product-item'+(selectedProducts.has(key)?' checked':'');
+    div.innerHTML=`
+      <input type="checkbox" ${selectedProducts.has(key)?'checked':''}
+        onchange="toggleProd(${JSON.stringify(key)},this.checked,this.closest('.product-item'))">
+      <span class="color-swatch" style="background:${color}"></span>
+      <span class="product-name">${short}
+        <span style="color:var(--text3);font-size:10px;display:block">合計 ${totals(p).toLocaleString()} 件</span>
+      </span>`;
+    el.appendChild(div);
+  });
+  updCount();
+}
+function totals(p){return Object.values(p.monthly).reduce((a,b)=>a+b,0);}
+function toggleProd(key,checked,el){if(checked)selectedProducts.add(key);else selectedProducts.delete(key);el.classList.toggle('checked',checked);updCount();renderChart();}
+function updCount(){const c=selectedProducts.size;document.getElementById('sel-count').textContent=c?`(${c})`:''}
+function selectAll(){if(!selectedBrand||!allData[selectedBrand])return;Object.keys(allData[selectedBrand]).forEach(k=>selectedProducts.add(k));renderProducts();renderChart();}
+function clearSel(){selectedProducts.clear();renderProducts();renderChart();}
+
+function renderMonthGrid(){
+  const el=document.getElementById('month-grid'); el.innerHTML='';
+  allMonths.forEach(m=>{
+    const c=document.createElement('div');
+    c.className='month-chip'+(selectedMonths.has(m)?' active':'');
+    c.textContent=m.replace(/^20/,''); c.title=m;
+    c.onclick=()=>{if(selectedMonths.has(m))selectedMonths.delete(m);else selectedMonths.add(m);c.classList.toggle('active');renderChart();};
+    el.appendChild(c);
+  });
+}
+function selMonths(n){
+  selectedMonths=n==='all'?new Set(allMonths):new Set(allMonths.slice(-n));
+  renderMonthGrid(); renderChart();
+}
+
+/* ─────────── Chart ─────────── */
+function renderChart(){
+  const canvas=document.getElementById('mainChart');
+  const empty=document.getElementById('empty');
+  const mArr=allMonths.filter(m=>selectedMonths.has(m));
+  let prods=[];
+  if(selectedBrand&&allData[selectedBrand])
+    prods=Object.entries(allData[selectedBrand]).filter(([k])=>selectedProducts.has(k)).sort((a,b)=>totals(b[1])-totals(a[1]));
+  updateMetrics(prods,mArr);
+  if(!prods.length||!mArr.length){
+    canvas.style.display='none'; empty.style.display='flex';
+    document.getElementById('legend').innerHTML='';
+    if(mainChart){mainChart.destroy();mainChart=null;} return;
+  }
+  canvas.style.display=''; empty.style.display='none';
+  const datasets=prods.map(([,p],i)=>{
+    const color=COLORS[i%COLORS.length];
+    return{
+      label:p.name.replace(/[【\[].+?[】\]]/g,'').trim(),
+      data:mArr.map(m=>p.monthly[m]||0),
+      borderColor:color,
+      backgroundColor:chartType==='bar'?color+'BB':color+'18',
+      fill:chartType==='line'&&prods.length===1,
+      tension:.35, pointRadius:mArr.length>18?2:4, pointHoverRadius:6, borderWidth:2,
+      borderDash:chartType==='line'?DASHES[i%DASHES.length]:[],
+    };
+  });
+  if(mainChart) mainChart.destroy();
+  mainChart=new Chart(canvas,{
+    type:chartType, data:{labels:mArr,datasets},
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      interaction:{mode:'index',intersect:false},
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>` ${ctx.dataset.label}: ${ctx.parsed.y.toLocaleString()} 件`}}},
+      scales:{
+        x:{ticks:{autoSkip:mArr.length>18,maxRotation:45,font:{size:10}},grid:{color:'rgba(128,128,128,.05)'}},
+        y:{beginAtZero:true,ticks:{font:{size:11},callback:v=>v.toLocaleString()},grid:{color:'rgba(128,128,128,.05)'},title:{display:true,text:'銷售量（件）',font:{size:11}}}
+      }
+    }
+  });
+  document.getElementById('chart-title').textContent=`${selectedBrand}・${prods.length} 品項・${mArr.length} 個月`;
+  document.getElementById('legend').innerHTML=prods.map(([,p],i)=>{
+    const s=p.name.replace(/[【\[].+?[】\]]/g,'').trim();
+    return`<span class="legend-item"><span class="legend-dot" style="background:${COLORS[i%COLORS.length]}"></span>${s.length>26?s.slice(0,26)+'…':s}</span>`;
+  }).join('');
+}
+
+function updateMetrics(prods,mArr){
+  const vals=prods.flatMap(([,p])=>mArr.map(m=>p.monthly[m]||0));
+  const total=vals.reduce((a,v)=>a+v,0);
+  const avg=mArr.length&&prods.length?Math.round(total/mArr.length):0;
+  let pv=0,pm='';
+  mArr.forEach(m=>{const s=prods.reduce((a,[,p])=>a+(p.monthly[m]||0),0);if(s>pv){pv=s;pm=m;}});
+  document.getElementById('m-sku').textContent=prods.length||'—';
+  document.getElementById('m-total').textContent=prods.length?total.toLocaleString():'—';
+  document.getElementById('m-avg').textContent=prods.length?avg.toLocaleString():'—';
+  document.getElementById('m-peak').textContent=prods.length?pv.toLocaleString():'—';
+  document.getElementById('m-peak-sub').textContent=pm||'—';
+}
+
+function toggleType(){
+  chartType=chartType==='line'?'bar':'line';
+  document.getElementById('type-btn').innerHTML=chartType==='line'
+    ?'<i class="ti ti-chart-bar" aria-hidden="true"></i> 切換長條'
+    :'<i class="ti ti-chart-line" aria-hidden="true"></i> 切換折線';
+  renderChart();
+}
+function dlChart(){
+  if(!mainChart)return;
+  const a=document.createElement('a');
+  a.href=document.getElementById('mainChart').toDataURL('image/png');
+  a.download=`sales-${selectedBrand}-${Date.now()}.png`; a.click();
+}
+
+/* ─────────── Init ─────────── */
+window.addEventListener('load', ()=>{
+  if(loadSavedKey()){
+    onKeyLoaded();
+  } else {
+    showBanner('info','請貼上 Service Account 私鑰 JSON 以連線（JSON 內容從 Google Cloud Console 下載）');
+  }
+});
+</script>
+</body>
+</html>
